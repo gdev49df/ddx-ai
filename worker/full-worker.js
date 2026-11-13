@@ -507,6 +507,47 @@ async function takeQuota(env, user, kind) {
 
 
 /* ---------- DDX AI: облачная копия чатов и привязка тарифа к аккаунту (хранится в KV) ---------- */
+// готовые коды активации (по 10 на тариф, на месяц). KV имеет приоритет: запись sub:КОД или просто КОД в KV переопределяет этот список
+const BUILTIN_CODES = {
+ "PRO-SVJ3-E3CP-WJVE": "pro",
+ "PRO-KTSZ-SCP3-LRYM": "pro",
+ "PRO-R3PJ-YHHA-MU4B": "pro",
+ "PRO-DGAQ-95XP-9433": "pro",
+ "PRO-AHJL-7QPP-C5C6": "pro",
+ "PRO-7FJM-D4A2-Y25Q": "pro",
+ "PRO-JSPL-C2KJ-7QYE": "pro",
+ "PRO-MV7V-HHZS-Y4SL": "pro",
+ "PRO-522B-BGLC-QK9F": "pro",
+ "PRO-9HY9-BMYZ-8LKZ": "pro",
+ "MAX-QASU-WPJL-ERNN": "max",
+ "MAX-CH7F-BZNA-2X4N": "max",
+ "MAX-2J35-QZ4B-AFDR": "max",
+ "MAX-3U4B-GQHH-7CS3": "max",
+ "MAX-98R2-D7WJ-FKAC": "max",
+ "MAX-RFGL-PDNF-U82T": "max",
+ "MAX-3FEQ-FC63-STV3": "max",
+ "MAX-HB6Q-8HHX-YDB3": "max",
+ "MAX-JRVN-R3PA-Y76S": "max",
+ "MAX-2UVK-W2UK-9JSN": "max",
+ "ULTRA-Q6WF-5DRJ-YQ4F": "ultra",
+ "ULTRA-UX96-SWV2-6RYN": "ultra",
+ "ULTRA-9BQT-34MJ-VV2B": "ultra",
+ "ULTRA-KAS2-JLRV-A6M6": "ultra",
+ "ULTRA-HQBB-EAMF-F37N": "ultra",
+ "ULTRA-9PRW-Z2VR-Y3RC": "ultra",
+ "ULTRA-A2LW-WE9N-HL38": "ultra",
+ "ULTRA-DYAE-WAAT-ZZ2K": "ultra",
+ "ULTRA-FBD4-2HUD-ZU2A": "ultra",
+ "ULTRA-6DQA-XNZB-83FB": "ultra"
+};
+async function codeInfo(env, code) {
+  let raw = null;
+  try { raw = JSON.parse(await env.KV.get('sub:' + code)); } catch (e) { raw = null; }
+  if (!raw) { try { raw = JSON.parse(await env.KV.get(code)); } catch (e) { raw = null; } }
+  if (!raw && BUILTIN_CODES[code]) raw = { plan: BUILTIN_CODES[code], period: 'month' };
+  return raw;
+}
+
 const AI_SUB_CODE = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
 
 async function aiSubOf(env, userId) {
@@ -514,7 +555,7 @@ async function aiSubOf(env, userId) {
   try { link = JSON.parse(await env.KV.get('ai:s:' + userId)); } catch (e) { link = null; }
   if (!link || !link.code) return null;
   let raw = null;
-  try { raw = JSON.parse(await env.KV.get('sub:' + link.code)); } catch (e) { raw = null; }
+  raw = await codeInfo(env, link.code);
   if (!raw || !raw.plan) return null;
   if (raw.exp && Date.now() > Number(raw.exp)) return null;
   return { code: link.code, plan: raw.plan, period: raw.period === 'year' ? 'year' : 'month', exp: raw.exp || null };
@@ -628,7 +669,7 @@ export default {
         if (code) {
           if (!env.KV) return reply(403, { error: 'code' }, origin);
           let raw = null;
-          try { raw = JSON.parse(await env.KV.get('sub:' + code)); } catch (e0) { raw = null; }
+          raw = await codeInfo(env, code);
           if (!raw || !PLANS[raw.plan]) return reply(403, { error: 'code' }, origin);
           const owner = await env.KV.get('sub-owner:' + code);
           if (owner && (!user || String(user.id) !== owner)) return reply(403, { error: 'used', detail: 'этот код уже привязан к другому аккаунту' }, origin);
