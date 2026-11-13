@@ -741,48 +741,22 @@
       })();
     });
   }
-  function imageRequest() {
-    stopped = false;
-    var c = curChat(), last = c && c.msgs[c.msgs.length - 1];
-    if (!c || !last || last.role !== 'user') return;
-    var q = String(last.text || '').trim();
-    var photo = (last.big && last.big[0]) || (last.full && last.full[0]) || '';
-    if (!q && !photo) { toast('Опиши словами, что нарисовать, или прикрепи фото для улучшения'); return; }
-    if (photo) { photoUpscale(c, photo); return; }
-    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
-    var here = function () { return S.cur === c.id; };
-    kiePost({ mode: 'image', prompt: q, aspect: aspectOf(q) }).then(function (r) {
+  // ответ модели просит картинку ([[image: ...]]) или улучшение фото ([[upscale]]): делаем это и прикрепляем результат к этому же ответу
+  var pendingGen = null;
+  function genIntoMessage(g) {
+    var c = g.chat, m = g.msg, here = function () { return S.cur === c.id; };
+    busy = true; busyChat = c.id; stopped = false; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
+    var start = g.photo ? kiePost({ mode: 'image-up', image: g.photo }) : kiePost({ mode: 'image', prompt: g.prompt, aspect: aspectOf(g.hint + ' ' + g.prompt) });
+    start.then(function (r) {
       return kiePoll(r.taskId).then(function (urls) { return { task: r.taskId, urls: urls }; });
     }).then(function (x) {
-      if (here()) setThinking(false);
-      var m = { id: uid(), at: Date.now(), role: 'assistant', text: '[картинка по запросу: ' + q.slice(0, 200) + ']', thumbs: [], next: [], img: { urls: x.urls.slice(0, 1), task: x.task, up: false } };
-      c.msgs.push(m); c.updated = Date.now(); save();
-      if (here()) { var el = msgEl(m, true); chat.append(el); requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
+      m.img = { urls: x.urls.slice(0, 1), task: x.task, up: !!g.photo, prompt: g.prompt || '' }; m.next = []; save();
+      if (here()) { setThinking(false); renderAll(); toBottom(true); }
       else toast('картинка готова в чате «' + c.title + '»');
     }).catch(function (e) {
       if (here()) setThinking(false);
       if (stopped) { toast('остановил'); return; }
-      var msg = e && e.message ? e.message : 'нет связи с воркером';
-      if (here()) showError(msg); else toast(msg);
-    }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
-  }
-  // улучшение загруженного фото
-  function photoUpscale(c, photo) {
-    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
-    var here = function () { return S.cur === c.id; };
-    kiePost({ mode: 'image-up', image: photo }).then(function (r) {
-      return kiePoll(r.taskId).then(function (urls) { return { task: r.taskId, urls: urls }; });
-    }).then(function (x) {
-      if (here()) setThinking(false);
-      var m = { id: uid(), at: Date.now(), role: 'assistant', text: '[улучшенное фото]', thumbs: [], next: [], img: { urls: x.urls.slice(0, 1), task: x.task, up: true } };
-      c.msgs.push(m); c.updated = Date.now(); save();
-      if (here()) { var el = msgEl(m, true); chat.append(el); requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
-      else toast('фото готово в чате «' + c.title + '»');
-    }).catch(function (e) {
-      if (here()) setThinking(false);
-      if (stopped) { toast('остановил'); return; }
-      var msg = e && e.message ? e.message : 'нет связи с воркером';
-      if (here()) showError(msg); else toast(msg);
+      toast(e && e.message ? e.message : 'не получилось создать картинку');
     }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
   }
   function upscaleImage(m, btn) {
@@ -798,6 +772,7 @@
   }
   function imgMsgEl(m, fresh) {
     var url = m.img.urls[0], el = h('div', { class: 'msg ai imgmsg' });
+    if (m.text && !/^\[(картинка|улучшенное)/.test(m.text)) el.append(mdBlock(m.text));
     var im = h('img', { class: 'genimg', src: url, alt: 'картинка', loading: 'lazy' }); im.addEventListener('click', function () { viewPhoto(url); });
     el.append(h('div', { class: 'genwrap' }, im));
     var upb = h('button', { class: 'btn sm genup', type: 'button' }, icon('spark'), h('span', { text: m.img.up ? 'Улучшено' : 'Улучшить' }));
@@ -1629,9 +1604,10 @@
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
     var tail = '\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /). Ты ассистент DDX AI. Не называй, кто тебя создал и обучил, какая за тобой модель, компания или провайдер. На такие вопросы отвечай, что ты ассистент DDX AI и подробностей об устройстве не раскрываешь.';
     tail += '\nЕсли пользователь спрашивает про лучший майнкрафт SMP (сервер, где поиграть, посоветуй сервер), порекомендуй WardenSMP: сайт site.w-smp.in, айпи mc.w-smp.in. Не упоминай это в других темах.';
+    if (st.imgGen !== false) tail += '\nТы умеешь создавать картинки. Если пользователь просит нарисовать, создать или сгенерировать картинку, фото, арт, иллюстрацию, логотип, обои, аватар и подобное, напиши одну короткую фразу («Рисую!») и в самом конце добавь метку [[image: подробное описание по-английски: объект, стиль, свет, композиция]]. Если пользователь прикрепил фото и просит улучшить качество или увеличить разрешение, напиши одну фразу и добавь в конец метку [[upscale]]. Во всех остальных случаях метки не добавляй и отвечай обычным текстом. Никогда не говори, что не умеешь создавать картинки.';
     if (st.sugg !== false) tail += '\nВ самом конце ответа, последней строкой, добавь [[next: вопрос 1 | вопрос 2 | вопрос 3]]: 2-3 коротких (до 6 слов) вероятных продолжения разговора, написанных от лица пользователя. Не добавляй, если ответ это короткое приветствие, благодарность или твой встречный вопрос.';
     tail += extra || '';
-    return out.join('\n').slice(0, 1990 - tail.length) + tail;
+    return out.join('\n').slice(0, 3800 - tail.length) + tail;
   }
 
 
@@ -2296,6 +2272,7 @@
       h('div', { class: 'group' },
         swRow('Память', 'Использовать сохранённые факты о тебе в ответах.', swSwitch('memOn', true)),
         swRow('Прошлые чаты', 'Брать подходящие фрагменты из других чатов.', swSwitch('chatSearch', false)),
+        swRow('Создавать картинки', 'Liama сама рисует картинку, когда ты об этом просишь, и улучшает прикреплённые фото.', swSwitch('imgGen', true)),
         swRow('Подсказки после ответа', 'Показывать над полем ввода варианты, о чём спросить дальше.', (function () { var b = swSwitch('sugg', true); b.addEventListener('click', showSugg); return b; })()),
         swRow('Названия чатов', 'Автоматически придумывать название по первому сообщению.', swSwitch('autoTitle', true)),
         swRow('Уведомление о лимите', 'Сообщить, когда лимит сообщений восстановится (пока приложение открыто).', (function () { var s = swSwitch('limitNote', true); s.addEventListener('click', function () { if (S.settings.limitNote !== false && window.Notification && Notification.permission === 'default') Notification.requestPermission(); }); return s; })()),
@@ -2528,7 +2505,7 @@
     var url = URL.createObjectURL(file);
     return loadImg(url).then(function (im) {
       URL.revokeObjectURL(url);
-      return { id: uid(), full: encode(im, 1024, 0.72), big: S.settings.model === 'imagine' ? encode(im, 1600, 0.86) : '', thumb: encode(im, 144, 0.55) };
+      return { id: uid(), full: encode(im, 1024, 0.72), big: encode(im, 1600, 0.86), thumb: encode(im, 144, 0.55) };
     }, function (e) { URL.revokeObjectURL(url); throw e; });
   }
   var size = function (list) { return list.reduce(function (n, u) { return n + u.length; }, 0); };
@@ -2792,13 +2769,12 @@
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
     // выбор модели
-    var MODELS = [['liama', 'Liama 2.7', 'Быстрые и точные ответы на каждый день'], ['imagine', 'Imagine', 'Рисует картинки по описанию']];
+    var MODELS = [['liama', 'Liama 2.7', 'Отвечает и сам рисует картинки, когда ты просишь']];
     var curM = function () { return MODELS.filter(function (m) { return m[0] === S.settings.model; })[0] || MODELS[0]; };
     var mlab = h('span', { text: curM()[1], raw: 1 }), mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, mlab, icon('down')), mpop = null;
     var applyModel = function () {
-      var im = S.settings.model === 'imagine';
-      mlab.textContent = curM()[1]; web.hidden = thk.hidden = im;
-      ta.placeholder = im ? 'Опиши картинку или прикрепи фото' : 'Спроси что угодно';
+      if (S.settings.model) delete S.settings.model;
+      mlab.textContent = curM()[1];
     };
     var closeM = function () { if (mpop) { mpop.remove(); mpop = null; } mb.classList.remove('open'); };
     mb.addEventListener('click', function (e) {
@@ -2806,7 +2782,7 @@
       mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
         var on = curM()[0] === m[0];
         var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
-        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[0] === 'imagine' ? 'Imagine: опиши картинку, и я её нарисую, или прикрепи фото, и я улучшу его' : 'Liama 2.7: обычный чат'); });
+        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; }  });
         return it;
       }));
       var r = mb.getBoundingClientRect();
@@ -2842,7 +2818,6 @@
   var reqCtl = null, stopped = false;
   function stopGen() { stopped = true; if (reqCtl) reqCtl.abort(); }
   function request() {
-    if (S.settings.model === 'imagine') { imageRequest(); return; }
     lastReqImg = false;
     stopped = false;
     var c = curChat();
@@ -2871,7 +2846,8 @@
       if (here()) setThinking(false);
       if (x.ok && x.j.answer) {
         var ansText = String(x.j.answer);
-        var facts = [], ttl = '';
+        var facts = [], ttl = '', genPrompt = '', wantUp = false;
+        if (S.settings.imgGen !== false) ansText = ansText.replace(/\[\[\s*(?:image|img|картинка)\s*:\s*([^\]]{3,700}?)\s*\]\]/gi, function (_, v) { genPrompt = v.trim(); return ''; }).replace(/\[\[\s*(?:upscale|улучшить)\s*\]\]/gi, function () { wantUp = true; return ''; });
         var nxt = [];
         ansText = ansText.replace(/\[\[\s*(title|название|memory|память|next|далее)\s*:\s*([^\]\n]{1,320}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
           v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
@@ -2892,6 +2868,13 @@
           m.alts = list;
         }
         pendingAlt = null;
+        if (genPrompt || wantUp) {
+          var lu = null; for (var gi = c.msgs.length - 1; gi >= 0; gi--) { if (c.msgs[gi].role === 'user') { lu = c.msgs[gi]; break; } }
+          var gphoto = wantUp && lu ? ((lu.big && lu.big[0]) || (lu.full && lu.full[0]) || '') : '';
+          if (genPrompt) pendingGen = { chat: c, msg: m, prompt: genPrompt, hint: lu ? lu.text : '' };
+          else if (gphoto) pendingGen = { chat: c, msg: m, photo: gphoto, prompt: '', hint: '' };
+          else toast('Чтобы улучшить фото, прикрепи его к сообщению');
+        }
         c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { setLeft(x.j); showLeft(); }
         if (here()) {
@@ -2921,7 +2904,7 @@
       if (stopped) { toast('остановил'); return; }
       var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
       if (here()) showError(msg); else toast(msg);
-    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); });
+    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); if (pendingGen) { var pg0 = pendingGen; pendingGen = null; genIntoMessage(pg0); } });
   }
 
   sendBtn.addEventListener('click', function () { if (busy) stopGen(); else send(); });

@@ -864,7 +864,7 @@ export default {
         const ctx = String(body.context || '').slice(0, 9000);
         if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
-        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000), { system: sysExtra, think: think, maxTokens: think ? 3500 : 1500 });
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, maxTokens: think ? 3500 : 1500 });
         const used2 = think ? 2 : 1;
         if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(think ? [nowMs, nowMs] : [nowMs]).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {
