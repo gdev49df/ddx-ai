@@ -2951,9 +2951,6 @@
 
   var splash = $('#splash');
   $('#splash-logo').append(logo('logo big'));
-  (function () {
-    var hl = $('#hero-logo'), ltr = 'DDX AI'.split('');
-    ltr.forEach(function (ch, i) { hl.append(h('span', { class: 'hl' + (ch === ' ' ? ' sp' : ''), style: 'animation-delay:' + (i * 90) + 'ms, ' + (1200 + i * 120) + 'ms', text: ch === ' ' ? '\u00a0' : ch, raw: 1 })); });
-  })();
+  $('#hero-logo').append(logo('logo herologo'));
   setTimeout(function () { splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 900); }, 1000);
 })();

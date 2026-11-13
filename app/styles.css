@@ -1147,18 +1147,3 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .modelpop { width: min(330px, calc(100vw - 16px)); }
 .modelpop .sk-t em { white-space: normal; overflow: visible; text-overflow: clip; }
 .modelpop .mitem { padding: 10px 12px; }
-
-/* приветствие: анимированная надпись DDX AI вместо логотипа */
-.hero-logo { width: auto; height: auto; display: flex; justify-content: center; position: relative; padding: 6px 0; }
-.hero-logo::before { content: ''; position: absolute; left: 50%; top: 50%; width: 180px; height: 80px; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgb(var(--w) / .14), transparent 75%); animation: heroglow 5s ease-in-out infinite; pointer-events: none; }
-.hero-logo .hl { position: relative; display: inline-block; font-size: clamp(30px, 9vw, 40px); font-weight: 900; letter-spacing: -.02em; line-height: 1;
-  background: linear-gradient(100deg, rgb(var(--w) / .55) 30%, var(--ink) 50%, rgb(var(--w) / .55) 70%); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  animation: hlin .9s var(--ease) both, hlshine 4.5s ease-in-out infinite; }
-.hero-logo .hl.sp { width: .3em; }
-.hero { gap: 26px; }
-.hero-greet { font-size: clamp(24px, 7vw, 32px); font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
-.hero-greet .cw { padding-bottom: .08em; }
-@keyframes hlin { from { opacity: 0; transform: translateY(22px) scale(.8); filter: blur(10px); } to { opacity: 1; transform: none; filter: blur(0); } }
-@keyframes hlshine { 0% { background-position: 100% 0; } 55%, 100% { background-position: 0% 0; } }
-@keyframes heroglow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .hero-logo .hl, .hero-logo::before { animation: none; } }
