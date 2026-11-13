@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.4.1';
+  var VERSION = 'v2.7';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -71,6 +71,7 @@
     more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
     down: '<path d="M6 9.5l6 6 6-6"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    out: '<path d="M9 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H9M15 8l4 4-4 4M19 12H9.5"/>',
     bolt: '<path d="M13 3L5.5 13.5H11L10 21l7.5-10.5H12z"/>',
     edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',
     trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l.8 12.5h8.4L17 7M10.5 11v5M13.5 11v5"/>',
@@ -364,6 +365,26 @@
   /* ---------- отрисовка ---------- */
   var chat = $('#chat'), hero = $('#hero'), ta = $('#t'), sendBtn = $('#send');
 
+  /* ---------- предпросмотр файла (справа, пол-окна) ---------- */
+  var pvEl = null;
+  function closePreview() {
+    if (!pvEl) return; var p = pvEl; pvEl = null; document.body.classList.remove('fpv-on');
+    p.classList.add('out'); setTimeout(function () { p.remove(); }, 260);
+  }
+  function openPreview(f) {
+    var text = String(f.text || ''), name = f.name || 'файл';
+    if (pvEl) { pvEl.remove(); pvEl = null; }
+    var cp = h('button', { class: 'icon-btn sm', type: 'button', 'aria-label': 'копировать' }, icon('copy')); cp.addEventListener('click', function () { copyText(text, cp); });
+    var dl = h('button', { class: 'icon-btn sm', type: 'button', 'aria-label': 'скачать' }, icon('download')); dl.addEventListener('click', function () { saveFile(name, text, 'text/plain'); });
+    var x = h('button', { class: 'icon-btn sm', type: 'button', 'aria-label': 'закрыть' }, icon('close')); x.addEventListener('click', closePreview);
+    var body = h('pre', { class: 'fpv-text' }); body.textContent = text || 'Содержимое недоступно (файл не сохранён в чате).';
+    pvEl = h('aside', { class: 'fpv' },
+      h('div', { class: 'fpv-head' }, icon('file'), h('div', { class: 'fpv-t' }, h('b', { text: name, raw: 1 }), h('em', { text: text.length + ' символов' })), cp, dl, x),
+      h('div', { class: 'fpv-body' }, body));
+    document.body.append(pvEl); document.body.classList.add('fpv-on');
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pvEl && !palEl) closePreview(); });
+
   function msgEl(m, fresh) {
     var el;
     if (m.role === 'user') {
@@ -374,7 +395,7 @@
         pics.forEach(function (src) { grid.append(h('img', { src: src, alt: 'фото', onclick: function () { viewPhoto(src); } })); });
         el.append(grid);
       }
-      if (m.files && m.files.length) el.append(h('div', { class: 'fchips' }, m.files.map(function (f) { return h('span', { class: 'fchip' }, icon('file'), h('span', { text: f.name })); })));
+      if (m.files && m.files.length) el.append(h('div', { class: 'fchips' }, m.files.map(function (f) { var c = h('button', { class: 'fchip', type: 'button' }, icon('file'), h('span', { text: f.name, raw: 1 })); c.addEventListener('click', function () { openPreview(f); }); return c; })));
       if (m.text) el.append(h('p', { text: m.text, raw: 1 }));
       if (m.text) { var eb = h('button', { class: 'medit', type: 'button', 'aria-label': 'изменить' }, icon('edit')); eb.addEventListener('click', function (e) { e.stopPropagation(); editMsg(m, el); }); el.append(eb); }
       if (fresh) el.classList.add('rise');
@@ -502,7 +523,13 @@
 
   /* ---------- листы, уведомления, просмотр фото ---------- */
   var sheet = $('#sheet'), panel = $('#sheet-panel');
+  var paneHost = null;   // на компьютере настройки открываются окном с разделами: внутренние экраны рисуются в правой части
   function openSheet(nodes, tall) {
+    if (paneHost) {
+      paneHost.replaceChildren.apply(paneHost, nodes.filter(function (n) { return n && !(n.classList && n.classList.contains('back')); }));
+      paneHost.scrollTop = 0; paneHost.classList.remove('swap'); void paneHost.offsetWidth; paneHost.classList.add('swap'); return;
+    }
+    panel.classList.remove('swin');
     panel.replaceChildren.apply(panel, nodes.filter(Boolean));
     panel.classList.toggle('tall', !!tall);
     panel.scrollTop = 0;
@@ -510,6 +537,7 @@
     requestAnimationFrame(function () { requestAnimationFrame(function () { sheet.classList.add('show'); }); });
   }
   function closeSheet() {
+    paneHost = null;
     sheet.classList.remove('show'); document.body.classList.remove('lock');
     setTimeout(function () { if (!sheet.classList.contains('show')) sheet.hidden = true; }, 540);
   }
@@ -624,6 +652,90 @@
   }
 
   var wide = function () { return window.matchMedia && matchMedia('(min-width: 900px)').matches; };
+
+  /* ---------- поиск по всему: чаты, проекты, Skills и действия (как командная палитра) ---------- */
+  var palEl = null;
+  function closeSearch() {
+    if (!palEl) return; var p = palEl; palEl = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 200);
+    document.body.classList.remove('lock');
+  }
+  function openSearch(tabKey) {
+    if (palEl) { closeSearch(); return; }
+    closeSheet(); closePop();
+    var tab = tabKey || 'all', sel = 0, rows = [];
+    var input = field('input', { type: 'text', placeholder: 'Поиск', 'aria-label': 'поиск', enterkeyhint: 'search' });
+    var list = h('div', { class: 'pal-list' });
+    var x = h('button', { class: 'pal-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); x.addEventListener('click', closeSearch);
+    var TABS = [['all', 'Все'], ['chats', 'Чаты'], ['projects', 'Проекты'], ['skills', 'Skills']];
+    var tabBox = h('div', { class: 'pal-tabs' }, TABS.map(function (t) {
+      var b = h('button', { type: 'button', class: t[0] === tab ? 'on' : '', 'data-k': t[0], text: t[1] }); b.addEventListener('click', function () { tab = t[0]; render(); input.focus(); }); return b;
+    }));
+    var go = function (fn) { return function () { closeSearch(); setDrawer(false); fn(); }; };
+    var hl = function (txt, q) {
+      var el = h('span', { class: 'pal-t' }), i = q ? txt.toLowerCase().indexOf(q) : -1;
+      if (i < 0) { el.textContent = txt; return el; }
+      el.append(txt.slice(0, i), h('mark', { class: 'hl', text: txt.slice(i, i + q.length), raw: 1 }), txt.slice(i + q.length)); return el;
+    };
+    var snippet = function (c, q) {
+      for (var i = 0; i < c.msgs.length; i++) { var t = c.msgs[i].text || '', at = t.toLowerCase().indexOf(q); if (at >= 0) { var a = Math.max(0, at - 24); return (a ? '…' : '') + t.slice(a, a + 70).replace(/\s+/g, ' '); } }
+      return '';
+    };
+    var render = function () {
+      var q = input.value.trim().toLowerCase(), groups = [];
+      tabBox.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-k') === tab); });
+      var chats = S.chats.slice().sort(byUpdated).filter(function (c) { return !q || c.title.toLowerCase().indexOf(q) >= 0 || c.msgs.some(function (m) { return (m.text || '').toLowerCase().indexOf(q) >= 0; }); });
+      if (tab === 'all' || tab === 'chats') {
+        groups.push([q ? 'Чаты' : 'Недавние', chats.slice(0, q ? 12 : 8).map(function (c) {
+          var pr = projectById(c.project), sn = q ? snippet(c, q) : '';
+          return { ic: c.pinned ? 'pin' : 'chat', t: c.title, q: q, sub: sn || (pr ? pr.name : ''), run: go(function () { openChat(c.id); }) };
+        })]);
+      }
+      if (tab === 'all' || tab === 'projects') {
+        var ps = S.projects.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) >= 0; });
+        if (ps.length && (q || tab === 'projects')) groups.push(['Проекты', ps.map(function (p) { return { ic: 'folder', t: p.name, q: q, sub: S.chats.filter(function (c) { return c.project === p.id; }).length + ' чатов', run: go(function () { S.open[p.id] = true; newChat(p.id); }) }; })]);
+      }
+      if (tab === 'all' || tab === 'skills') {
+        var ks = skillList().filter(function (k) { return !q || k.cmd.indexOf(q.replace(/^\//, '')) >= 0 || k.name.toLowerCase().indexOf(q) >= 0; });
+        if (ks.length && (q || tab === 'skills')) groups.push(['Skills', ks.map(function (k) { return { ic: 'bolt', t: '/' + k.cmd, q: '', sub: k.desc, run: go(function () { ta.value = '/' + k.cmd + ' '; grow(); syncSend(); storeDraft(); ta.focus(); }) }; })]);
+      }
+      if (tab === 'all') {
+        var acts = [['edit', 'Новая сессия', function () { newChat(null); }], ['folder', 'Новый проект', function () { projectForm(null); }], ['bolt', 'Skills', function () { wide() ? openSettingsWin('skills') : openSkills(); }],
+          ['brain', 'Память', function () { wide() ? openSettingsWin('memory') : openMemory(); }], ['star', 'Тарифы', function () { wide() ? openSettingsWin('plans') : openPlans(); }], ['gear', 'Настройки', openMenu]]
+          .filter(function (a) { return !q || a[1].toLowerCase().indexOf(q) >= 0; }).map(function (a) { return { ic: a[0], t: a[1], q: q, sub: '', run: go(a[2]) }; });
+        if (acts.length) groups.push(['Действия', acts]);
+      }
+      list.replaceChildren(); rows = [];
+      groups.forEach(function (g) {
+        if (!g[1].length) return;
+        list.append(h('p', { class: 'pal-h', text: g[0] }));
+        g[1].forEach(function (it) {
+          var idx = rows.length, r = h('button', { class: 'pal-r', type: 'button', style: idx < 9 ? 'animation-delay:' + (idx * 22) + 'ms' : '' }, icon(it.ic), h('span', { class: 'pal-m' }, hl(it.t, it.q), it.sub ? h('em', { text: it.sub, raw: 1 }) : null), h('span', { class: 'pal-go' }, icon('chev')));
+          r.addEventListener('click', it.run); r.addEventListener('pointermove', function () { if (sel !== idx) { sel = idx; mark(); } });
+          rows.push(r); list.append(r);
+        });
+      });
+      if (!rows.length) list.append(h('p', { class: 'pal-empty', text: 'Ничего не нашлось' }));
+      sel = 0; mark();
+    };
+    var mark = function () { rows.forEach(function (r, i) { r.classList.toggle('sel', i === sel); }); if (rows[sel]) rows[sel].scrollIntoView({ block: 'nearest' }); };
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (rows.length) { sel = (sel + 1) % rows.length; mark(); } }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (rows.length) { sel = (sel - 1 + rows.length) % rows.length; mark(); } }
+      else if (e.key === 'Enter') { e.preventDefault(); if (rows[sel]) rows[sel].click(); }
+      else if (e.key === 'Tab') { e.preventDefault(); var i = TABS.map(function (t) { return t[0]; }).indexOf(tab); tab = TABS[(i + (e.shiftKey ? 3 : 1)) % 4][0]; render(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); }
+    });
+    var hint = function (k, t) { return h('span', { class: 'pal-hint' }, h('i', { text: t }), h('kbd', { text: k })); };
+    palEl = h('div', { class: 'pal' }, h('div', { class: 'pal-box' },
+      h('div', { class: 'pal-top' }, input, x), tabBox, list,
+      h('div', { class: 'pal-foot' }, hint('Esc', 'Закрыть'), hint('↑ ↓', 'Выбрать'), hint('Enter', 'Открыть'), hint('Tab', 'Сменить тип'))));
+    palEl.addEventListener('pointerdown', function (e) { if (e.target === palEl) closeSearch(); });
+    document.body.append(palEl); document.body.classList.add('lock');
+    render(); setTimeout(function () { input.focus(); }, 30);
+  }
+  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); } });
+
   var sideUI = null;
   function refreshSide() { if (sideUI) sideUI.fill(); }
   // после действия над чатом: на телефоне вернуться к списку, на компьютере закрыть окно (список слева уже виден)
@@ -718,7 +830,7 @@
     var nav = function (ic, label, fn, cls) {
       var b = h('button', { class: 'snav' + (cls ? ' ' + cls : ''), type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', fn); return b;
     };
-    var showSearch = function () { searchBox.hidden = false; input.focus(); input.select(); };
+    var showSearch = function () { setDrawer(false); openSearch(); };
     var srow = function (c, pin) {
       var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
       more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
@@ -769,7 +881,8 @@
       var nm = (S.settings.name || '').trim();
       var prof = h('button', { class: 'sprof', type: 'button', 'aria-label': 'профиль' },
         h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
-        h('span', { class: 'sname', text: nm || 'DDX AI', raw: 1 }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''));
+        h('span', { class: 'sid' }, h('b', { text: (acct && acct.user && (nm || acct.user.login)) || nm || 'DDX AI', raw: 1 }), h('em', { text: (sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free') + (acct ? ' · аккаунт' : ''), raw: 1 })),
+        h('span', { class: 'schev' }, icon('down')));
       prof.addEventListener('click', function (e) { e.stopPropagation(); openProfile(); });
       foot.replaceChildren(prof,
         h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })));
@@ -1070,10 +1183,10 @@
   /* ---------- тарифы ---------- */
   // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
   var LIMITS = {
-    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 5, skills: 2 },
-    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 15, skills: 8 },
-    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30, skills: 1e9 },
-    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30, skills: 1e9 }
+    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 15, skills: 2 },
+    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 45, skills: 8 },
+    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 },
+    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 }
   };
   function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
   function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
@@ -1127,15 +1240,17 @@
           ? h('div', { class: 'plan-p' }, h('b', { text: money(total) }), h('i', { text: '₸' }), h('em', { text: year ? 'в год' : 'в месяц' }),
               year ? h('s', { text: money(p.price * 12) + ' ₸' }) : null)
           : h('div', { class: 'plan-p' }, h('b', { text: '0' }), h('i', { text: '₸' }), h('em', { text: 'навсегда' }));
-        return h('div', { class: 'plan' + (cur ? ' cur' : '') + (p.hot ? ' hot' : ''), style: 'animation-delay:' + (i * 70) + 'ms' },
-          h('div', { class: 'plan-h' }, h('span', { class: 'plan-n', text: p.name }),
+        var PI = { free: 'chat', pro: 'bolt', max: 'star', ultra: 'brain' };
+        return h('div', { class: 'plan ' + p.id + (cur ? ' cur' : '') + (p.hot ? ' hot' : ''), style: 'animation-delay:' + (i * 70) + 'ms' },
+          h('div', { class: 'plan-h' }, h('span', { class: 'plan-n' }, h('span', { class: 'plan-ic' }, icon(PI[p.id] || 'star')), h('span', { text: p.name })),
             h('span', { class: 'plan-tags' }, p.badge ? h('span', { class: 'plan-tag soft', text: p.badge }) : null, cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null)),
           priceRow,
           h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? money(p.limit * k) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line })),
+          h('i', { class: 'plan-sep' }),
           featureRows(p.id),
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
           year && p.price ? h('p', { class: 'plan-save', text: '2 месяца в подарок' }) : null,
-          p.price ? h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить' }) : null);
+          p.price ? (cur ? h('span', { class: 'btn block buy now', text: 'Твой тариф' }) : h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить в WhatsApp' })) : null);
       });
       plansBox.replaceChildren.apply(plansBox, made);
       made.forEach(function (card) { var b = card.querySelector('.plan-p b'); if (b) countUp(b); });
@@ -1148,7 +1263,7 @@
       segBtns.push(b); return b;
     }));
     cards();
-    var code = field('input', { type: 'text', placeholder: 'код тарифа', 'aria-label': 'код тарифа', autocapitalize: 'characters', spellcheck: 'false' });
+    var code = field('input', { type: 'text', placeholder: 'Код активации', 'aria-label': 'код активации', autocapitalize: 'characters', spellcheck: 'false' });
     var note = h('p', { class: 'cap', text: 'после оплаты в ватсап пришлют код. введи его здесь.' });
     var go = h('button', { class: 'btn', type: 'button', text: 'активировать' });
     go.addEventListener('click', function () {
@@ -1328,6 +1443,45 @@
       h('div', { class: 'form' }, login, pass, mode === 'up' ? nm : null, err, go)
     ], true);
   }
+  /* ---------- смена имени и пароля ---------- */
+  function openRename() {
+    var inp = field('input', { type: 'text', placeholder: 'как тебя зовут', 'aria-label': 'имя', maxlength: '24', autocomplete: 'name', value: (S.settings.name || (acct && acct.user && (acct.user.name || acct.user.login)) || '') });
+    inp.value = S.settings.name || (acct && acct.user && (acct.user.name || acct.user.login)) || '';
+    var ok = h('button', { class: 'btn solid block', type: 'button', text: 'Сохранить' });
+    var go = function () {
+      var v = inp.value.trim().slice(0, 24); if (!v) { toast('Введи имя'); return; }
+      S.settings.name = v; if (acct && acct.user) acct.user.name = v;
+      try { ls.set('wchat-acct', JSON.stringify(acct)); } catch (e0) { /* ok */ }
+      save(); renderAll(); if (acct) api('/auth/name', { name: v }).then(function () {}, function () {});
+      closeSheet(); toast('Имя изменено');
+    };
+    ok.addEventListener('click', go); inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    openSheet([h('h2', { text: 'Изменить имя' }), h('div', { class: 'group solo' }, inp), ok]);
+    setTimeout(function () { inp.focus(); inp.select(); }, 350);
+  }
+  function openPassword() {
+    var old = field('input', { type: 'password', placeholder: 'Текущий пароль', 'aria-label': 'текущий пароль', maxlength: '100', autocomplete: 'current-password' });
+    var nw = field('input', { type: 'password', placeholder: 'Новый пароль (от 6 символов)', 'aria-label': 'новый пароль', maxlength: '100', autocomplete: 'new-password' });
+    var nw2 = field('input', { type: 'password', placeholder: 'Повтори новый пароль', 'aria-label': 'повтор пароля', maxlength: '100', autocomplete: 'new-password' });
+    var err = h('p', { class: 'cap err', text: '' });
+    var ok = h('button', { class: 'btn solid block', type: 'button', text: 'Изменить пароль' });
+    var go = function () {
+      err.textContent = '';
+      if (!old.value) { err.textContent = 'Введи текущий пароль'; return; }
+      if (nw.value.length < 6) { err.textContent = 'Новый пароль: от 6 символов'; return; }
+      if (nw.value !== nw2.value) { err.textContent = 'Пароли не совпадают'; return; }
+      if (nw.value === old.value) { err.textContent = 'Новый пароль совпадает с текущим'; return; }
+      ok.disabled = true; ok.textContent = 'меняю…';
+      api('/auth/password', { password: old.value, newPassword: nw.value }).then(function (x) {
+        ok.disabled = false; ok.textContent = 'Изменить пароль';
+        if (x.ok) { closeSheet(); toast('Пароль изменён'); return; }
+        err.textContent = x.st === 401 ? 'Текущий пароль неверный' : (x.j && x.j.detail) || 'Не получилось, попробуй ещё раз';
+      }, function () { ok.disabled = false; ok.textContent = 'Изменить пароль'; err.textContent = 'Нет связи с сервером'; });
+    };
+    ok.addEventListener('click', go); nw2.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    openSheet([h('h2', { text: 'Изменить пароль' }), h('div', { class: 'group solo stack' }, old, nw, nw2), err, ok]);
+  }
+
   function openAccount() {
     if (!acct) { openAuth('in'); return; }
     var u = acct.user || {}, nm = (S.settings.name || u.name || u.login || '').trim();
@@ -1343,6 +1497,7 @@
       h('h2', { text: 'Аккаунт' }),
       h('div', { class: 'group acc' }, h('div', { class: 'acc-top' }, h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
         h('div', { class: 'acc-t' }, h('b', { text: nm || u.login, raw: 1 }), h('span', { text: '@' + u.login, raw: 1 })))),
+      h('div', { class: 'group' }, grow2('Изменить имя', 'edit', nm, openRename), grow2('Изменить пароль', 'user', '', openPassword)),
       h('p', { class: 'glabel', text: 'Синхронизация' }),
       h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('download'), h('span', { class: 'gl', text: 'Последняя' }), h('span', { class: 'gv', text: when }))),
       syncBtn,
@@ -1351,7 +1506,87 @@
     ], true);
   }
 
+
+
+  /* ---------- окно настроек на компьютере: слева разделы, справа содержимое ---------- */
+  var swSec = 'general';
+  function openUsage() {
+    var L = lim(), big = function (n) { return n >= 1e9 ? '∞' : String(n); };
+    var planName = sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free';
+    var left = lastLeft ? lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') : 'после первого сообщения';
+    var up = h('button', { class: 'btn solid block', type: 'button', text: sub ? 'Сменить тариф' : 'Улучшить тариф' }); up.addEventListener('click', function () { openPlans(); });
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Использование' }),
+      h('div', { class: 'group' },
+        grow2('Тариф', 'star', planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : ''), null),
+        grow2('Сообщений осталось', 'gauge', left, null)),
+      h('p', { class: 'glabel', text: 'Что даёт тариф' }),
+      h('div', { class: 'group' },
+        grow2('Фото в сообщении', 'image', String(L.photos), null),
+        grow2('Файлы в сообщении', 'file', String(L.files), null),
+        grow2('Символов из файла', 'file', money(L.chars), null),
+        grow2('Проекты', 'folder', big(L.projects), null),
+        grow2('Закреплённые чаты', 'pin', big(L.pins), null),
+        grow2('Записей в памяти', 'brain', big(L.memory), null),
+        grow2('Skills', 'bolt', big(L.skills), null)),
+      up
+    ], true);
+  }
+  function openData() {
+    var del = twice('Удалить все чаты', 'Точно удалить? Нажми ещё раз', function () {
+      S.chats.forEach(function (c) { goneAdd(c.id); }); S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); toast('Чаты удалены');
+    }, 'danger');
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Данные' }),
+      h('div', { class: 'group' }, grow2('Сохранить копию чатов', 'download', '', exportAll), grow2('Загрузить копию', 'share', '', function () { importInput.click(); })),
+      h('div', { class: 'group solo' }, del)
+    ], true);
+  }
+  function openGeneral() {
+    var cur = (window.WTheme && WTheme.mode()) || 'dark';
+    var seg = h('div', { class: 'seg3' }, [['auto', 'Системная'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(function (x) {
+      var b = h('button', { type: 'button', class: x[0] === cur ? 'on' : '', text: x[1] });
+      b.addEventListener('click', function () { WTheme.set(x[0], true); seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
+      return b;
+    }));
+    openSheet([
+      h('h2', { text: 'Общее' }),
+      h('p', { class: 'glabel', text: 'Внешний вид' }),
+      h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('palette'), h('span', { class: 'gl', text: 'Тема' }), seg)),
+      h('p', { class: 'foot', text: 'DDX AI ' + VERSION, raw: 1 })
+    ], true);
+  }
+  function openSettingsWin(sec) {
+    swSec = sec || swSec || 'general';
+    var secs = [['general', 'Общее', 'gear', openGeneral], ['account', 'Аккаунт', 'user', function () { if (acct) openAccount(); else openAuth('in'); }], ['pers', 'Персонализация', 'palette', openPersonal],
+      ['memory', 'Память', 'brain', openMemory], ['skills', 'Skills', 'bolt', openSkills], ['plans', 'Тарифы', 'star', function () { openPlans(); }], ['usage', 'Использование', 'gauge', openUsage], ['data', 'Данные', 'download', openData]];
+    var content = h('div', { class: 'sw-content' }), nav = h('div', { class: 'sw-nav' }), find = field('input', { type: 'search', placeholder: 'Поиск', 'aria-label': 'поиск по настройкам' });
+    var btns = secs.map(function (x) {
+      var b = h('button', { class: 'sw-item', type: 'button', 'data-k': x[0] }, icon(x[2]), h('span', { text: x[1] }));
+      b.addEventListener('click', function () { show(x[0]); }); return b;
+    });
+    var show = function (k) {
+      swSec = k; paneHost = content;
+      btns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-k') === k); });
+      secs.filter(function (x) { return x[0] === k; })[0][3]();
+    };
+    find.addEventListener('input', function () {
+      var q = find.value.trim().toLowerCase();
+      btns.forEach(function (b) { b.hidden = !!q && b.textContent.toLowerCase().indexOf(q) < 0; });
+    });
+    var x = h('button', { class: 'round-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); x.addEventListener('click', closeSheet);
+    nav.append(h('div', { class: 'sw-find' }, icon('search'), find), h('p', { class: 'glabel', text: 'Предпочтения' }));
+    btns.slice(0, 4).forEach(function (b) { nav.append(b); }); nav.append(h('p', { class: 'glabel', text: 'Приложение' })); btns.slice(4).forEach(function (b) { nav.append(b); });
+    var win = h('div', { class: 'sw' }, h('div', { class: 'sw-head' }, h('h2', { text: 'Настройки' }), x), h('div', { class: 'sw-body' }, nav, content));
+    paneHost = null; openSheet([win], false); panel.classList.add('swin');
+    show(swSec);
+  }
+  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openMenu(); } });
+
   function openMenu() {
+    if (wide()) { openSettingsWin(); return; }
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
     var close = h('button', { class: 'round-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); close.addEventListener('click', closeSheet);
     var themes = h('div', { class: 'themes' }, [['light', 'Светлая'], ['dark', 'Тёмная'], ['auto', 'Системная']].map(function (x) {
@@ -1379,7 +1614,7 @@
         grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
         grow2('Skills', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
         grow2('Тариф', 'star', planName, function () { openPlans(); }),
-        grow2('Использование', 'gauge', usage, null)),
+        grow2('Использование', 'gauge', usage, openUsage)),
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
       h('p', { class: 'glabel', text: 'Данные' }),
       h('div', { class: 'group' },
@@ -1445,7 +1680,8 @@
   /* ---------- навыки: готовые инструкции из файла .txt / .md ---------- */
   var SK_MAX = 3500;
   function skillList() { return S.settings.skills || (S.settings.skills = []); }
-  function skillByCmd(cmd) { cmd = String(cmd || '').toLowerCase(); return skillList().filter(function (k) { return k.cmd === cmd; })[0] || null; }
+  function skillByCmd(cmd) { cmd = String(cmd || '').toLowerCase(); return skillList().filter(function (k) { return k.cmd === cmd && !k.off; })[0] || null; }
+  function skillAny(cmd) { return skillList().filter(function (k) { return k.cmd === cmd; })[0] || null; }
   function cleanCmd(x) { return String(x || '').replace(/^\/+/, '').toLowerCase().replace(/[^\p{L}\d_-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 32); }
   // формат файла: первая строка «/команда» (или command: в шапке ---), дальше сама инструкция
   function parseSkill(text, fileName) {
@@ -1460,14 +1696,14 @@
     cmd = cleanCmd(cmd);
     if (!cmd || cmd === 'off') throw new Error('cmd');
     if (!body) throw new Error('empty');
-    return { id: uid(), cmd: cmd, name: (meta.name || '').slice(0, 40) || cmd, desc: (meta.description || body.split('\n')[0]).slice(0, 90), text: body.slice(0, SK_MAX), cut: body.length > SK_MAX };
+    return { id: uid(), cmd: cmd, name: (meta.name || '').slice(0, 40) || cmd, desc: (meta.description || body.split('\n')[0]).slice(0, 90), text: body.slice(0, SK_MAX), cut: body.length > SK_MAX, at: Date.now() };
   }
   function addSkillFiles(files) {
     var list = Array.prototype.slice.call(files || []), done = 0, last = '';
     Promise.all(list.map(function (f) {
       return f.text().then(function (t) {
-        var k = parseSkill(t, f.name), old = skillByCmd(k.cmd), arr = skillList();
-        if (old) { k.id = old.id; arr[arr.indexOf(old)] = k; }
+        var k = parseSkill(t, f.name), old = skillAny(k.cmd), arr = skillList();
+        if (old) { k.id = old.id; k.off = old.off; arr[arr.indexOf(old)] = k; }
         else { if (arr.length >= lim().skills) { limitToast('На тарифе ' + planWord() + ' до ' + lim().skills + ' skills'); return; } arr.push(k); }
         done++; last = '/' + k.cmd; if (k.cut) toast('skill длинный: взял первые ' + SK_MAX + ' символов');
       }, function () { /* прочитаем ниже */ }).then(null, function (e) { toast(e && e.message === 'cmd' ? 'в файле нет команды: первой строкой напиши /имя' : e && e.message === 'empty' ? 'в файле нет инструкции' : 'не получилось прочитать «' + f.name + '»'); });
@@ -1512,18 +1748,52 @@
     document.body.append(skillPop);
   }
   document.addEventListener('pointerdown', function (e) { if (skillPop && !skillPop.contains(e.target) && e.target !== ta) closeSkillPop(); });
+
+  function ago(ts) {
+    if (!ts) return 'давно';
+    var m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return 'только что'; if (m < 60) return m + ' мин назад';
+    var hr = Math.round(m / 60); if (hr < 24) return hr + ' ч назад';
+    return Math.round(hr / 24) + ' дн назад';
+  }
+  function openSkill(k, tab) {
+    tab = tab || 'ov';
+    var back = h('button', { class: 'skback', type: 'button' }, icon('chev'), h('span', { text: 'Ваши Skills' })); back.addEventListener('click', openSkills);
+    var on = h('button', { class: 'switch' + (k.off ? '' : ' on'), type: 'button', role: 'switch', 'aria-label': 'включить skill' }, h('i'));
+    on.addEventListener('click', function () { k.off = !k.off; on.classList.toggle('on', !k.off); save(); });
+    var tryIt = h('button', { class: 'btn solid', type: 'button' }, icon('chat'), h('span', { text: 'Попробовать в чате' }));
+    tryIt.addEventListener('click', function () { if (k.off) { k.off = false; save(); } closeSheet(); ta.value = '/' + k.cmd + ' '; grow(); syncSend(); storeDraft(); ta.focus(); });
+    var tabs = h('div', { class: 'sk-tabs' }, [['ov', 'Обзор'], ['src', 'Содержимое']].map(function (x) {
+      var b = h('button', { type: 'button', class: x[0] === tab ? 'on' : '', text: x[1] }); b.addEventListener('click', function () { if (x[0] !== tab) openSkill(k, x[0]); }); return b;
+    }));
+    var del = twice('Удалить skill', 'Точно удалить? Нажми ещё раз', function () { var a = skillList(); a.splice(a.indexOf(k), 1); save(); openSkills(); toast('Skill удалён'); }, 'danger');
+    var side = h('div', { class: 'sk-side' },
+      h('p', { class: 'sk-k', text: 'Автор' }), h('p', { class: 'sk-v' }, icon('user'), h('span', { text: 'Вы' })),
+      h('p', { class: 'sk-k', text: 'Команда' }), h('p', { class: 'sk-v' }, icon('bolt'), h('span', { text: '/' + k.cmd, raw: 1 })),
+      h('p', { class: 'sk-k', text: 'Размер' }), h('p', { class: 'sk-v' }, icon('file'), h('span', { text: k.text.length + ' символов' })),
+      h('p', { class: 'sk-k', text: 'Как вызвать' }), h('p', { class: 'sk-v dim', text: 'Напиши /' + k.cmd + ' в любом месте сообщения', raw: 1 }));
+    var body = tab === 'ov'
+      ? h('div', { class: 'sk-cols' }, h('div', { class: 'sk-main' }, h('p', { class: 'sk-k', text: 'Описание' }), h('p', { class: 'sk-desc', text: k.desc || k.text.slice(0, 200), raw: 1 }),
+          h('p', { class: 'sk-k', text: 'Начало инструкции' }), h('p', { class: 'sk-desc dim', text: k.text.slice(0, 360) + (k.text.length > 360 ? '…' : ''), raw: 1 })), side)
+      : h('pre', { class: 'sk-src' }, h('code', { text: k.text }));
+    openSheet([
+      back,
+      h('div', { class: 'sk-head' },
+        h('span', { class: 'sk-tile' }, icon('bolt')),
+        h('div', { class: 'sk-ht' }, h('b', { text: k.name, raw: 1 }), (Date.now() - (k.at || 0) < 86400000) ? h('span', { class: 'plan-tag', text: 'Новое' }) : null,
+          h('span', { class: 'sk-sub', text: 'вами · обновлено ' + ago(k.at) })),
+        h('div', { class: 'sk-act' }, tryIt, on)),
+      tabs, body, h('div', { class: 'group solo' }, del)
+    ], true);
+  }
+
   function openSkills() {
     var arr = skillList(), box = h('div', { class: 'group' });
     if (!arr.length) box.append(h('p', { class: 'cap pad', text: 'Пока нет skills. Загрузи файл .txt или .md.' }));
     arr.forEach(function (k, i) {
       var use = h('button', { class: 'sk-use', type: 'button' }, h('span', { class: 'sk-t' }, h('b', { text: k.name === k.cmd ? '/' + k.cmd : k.name, raw: 1 }), h('em', { text: (k.name === k.cmd ? '' : '/' + k.cmd + ' · ') + k.desc, raw: 1 })));
-      use.addEventListener('click', function () { closeSheet(); ta.value = '/' + k.cmd + ' '; grow(); syncSend(); storeDraft(); ta.focus(); });
-      var armed = false, del = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'удалить skill' }, icon('trash'));
-      del.addEventListener('click', function () {
-        if (!armed) { armed = true; del.classList.add('armed'); setTimeout(function () { armed = false; del.classList.remove('armed'); }, 2500); return; }
-        arr.splice(i, 1); save(); showSkillbar(); openSkills();
-      });
-      box.append(h('div', { class: 'grow sk' }, icon('bolt'), use, del));
+      use.addEventListener('click', function () { openSkill(k); });
+      box.append(h('div', { class: 'grow sk' + (k.off ? ' off' : '') }, icon('bolt'), use, k.off ? h('span', { class: 'gv', text: 'выкл' }) : null, icon('chev')));
     });
     var add = h('button', { class: 'btn solid block', type: 'button' }, icon('plus'), h('span', { text: 'Добавить файл' }));
     add.addEventListener('click', function () { $('#skillfile').click(); });
@@ -1612,7 +1882,7 @@
     box.replaceChildren.apply(box, atts.map(function (a) {
       var x = h('button', { type: 'button', 'aria-label': 'убрать' }, icon('close'));
       x.addEventListener('click', function () { atts = atts.filter(function (o) { return o.id !== a.id; }); renderAtts(); syncSend(); });
-      if (a.kind === 'file') return h('div', { class: 'att doc' }, icon('file'), h('span', { text: a.name }), x);
+      if (a.kind === 'file') { var dc = h('div', { class: 'att doc' }, icon('file'), h('span', { text: a.name }), x); dc.addEventListener('click', function (e) { if (!x.contains(e.target)) openPreview(a); }); return dc; }
       return h('div', { class: 'att' }, h('img', { src: a.thumb, alt: 'фото' }), x);
     }));
     measure();
@@ -1836,7 +2106,7 @@
         msg = sub ? 'лимит твоего тарифа исчерпан. можно взять тариф побольше' : 'лимит на сегодня исчерпан, завтра можно снова. или возьми тариф'; plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
-        msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код тарифа не найден. введи его заново в тарифах';
+        msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код активации не найден. введи его заново в тарифах';
         subCode = ''; sub = null; ls.del ? ls.del(KEY_CODE) : ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); plans = true;
       }
       else if (x.st === 413) msg = 'фото слишком тяжёлые. убери одно или пришли поменьше';
@@ -1894,22 +2164,20 @@
       var b = h('button', { class: 'pi', type: 'button' }, icon(ic), h('span', { text: label }), val ? h('em', { class: 'pv', text: val, raw: 1 }) : document.createTextNode(''));
       b.addEventListener('click', go(fn)); return b;
     };
-    var memN = (S.settings.memory || []).length;
-    var top = h('button', { class: 'ptop', type: 'button' },
-      h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
-      h('span', { class: 'acc-t' }, h('b', { text: nm || 'DDX AI', raw: 1 }), h('span', { text: 'Тариф ' + planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : '') })));
-    top.addEventListener('click', go(openPersonal));
-    var up = h('button', { class: 'pbuy', type: 'button' }, icon('star'), h('span', { text: sub ? 'Сменить тариф' : 'Улучшить тариф' }));
-    up.addEventListener('click', go(function () { openPlans(); }));
+    var open2 = function (sec, fn) { return wide() ? function () { openSettingsWin(sec); } : fn; };
+    var mail = h('div', { class: 'pmail' }, h('span', { text: acct && acct.user ? acct.user.login : (nm || 'DDX AI'), raw: 1 }), h('em', { text: planName, raw: 1 }));
     popEl = h('div', { class: 'popmenu up prof', role: 'menu' },
-      top, up, h('i', { class: 'psep' }),
-      item(acct ? 'Аккаунт' : 'Войти', 'user', acct ? openAccount : function () { openAuth('in'); }, acct && acct.user ? acct.user.login : ''),
-      item('Персонализация', 'user', openPersonal),
-      item('Память', 'brain', openMemory, memN ? String(memN) : ''),
-      item('Skills', 'bolt', openSkills, skillList().length ? String(skillList().length) : ''),
-      item('Тарифы', 'star', function () { openPlans(); }, planName),
+      mail,
+      item('Изменить имя', 'edit', openRename),
+      item('Настройки', 'gear', openMenu, wide() ? 'Ctrl+,' : ''),
+      item('Персонализация', 'user', open2('pers', openPersonal)),
+      item('Память', 'brain', open2('memory', openMemory)),
+      item('Skills', 'bolt', open2('skills', openSkills)),
+      item('Использование', 'gauge', open2('usage', openUsage)),
       h('i', { class: 'psep' }),
-      item('Настройки', 'gear', openMenu));
+      item(sub ? 'Сменить тариф' : 'Улучшить тариф', 'arrowup', open2('plans', function () { openPlans(); })),
+      h('i', { class: 'psep' }),
+      acct ? item('Выйти', 'out', function () { api('/auth/logout', {}).then(function () {}, function () {}); dropAcct('Ты вышел из аккаунта'); }) : item('Войти', 'user', open2('account', function () { openAuth('in'); })));
     var r = foot.getBoundingClientRect();
     popEl.style.left = (r.left + 4) + 'px'; popEl.style.width = (r.width - 8) + 'px'; popEl.style.bottom = (window.innerHeight - r.top + 8) + 'px';
     document.body.append(popEl);
