@@ -1015,3 +1015,7 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
 .msg-actions .mtime { margin-left: 8px; font-size: 12.5px; color: var(--mute); opacity: 0; transition: opacity .25s; white-space: nowrap; }
 .msg.ai:hover .mtime, .msg.ai:focus-within .mtime { opacity: 1; }
 @media (hover: none) { .msg-actions .mtime { opacity: .8; } }
+
+.msg-actions { gap: 0; margin-left: -6px; }
+.msg-actions .ab { width: 28px; height: 30px; }
+.msg-actions .mtime { margin-left: 22px; }
