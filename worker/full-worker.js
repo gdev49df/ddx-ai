@@ -44,15 +44,43 @@ const CHAT_SYSTEM = 'Ты DDX AI, дружелюбный помощник. От�
   + 'Можно использовать markdown: списки, **жирный**, `код`, блоки кода и простые таблицы. Не выдумывай факты: если не уверен, скажи об этом.';
 const CHAT_IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
-async function chatLlm(env, models, messages, extra) {
+// поиск в интернете: tavily (TAVILY_KEY) или brave (BRAVE_KEY); без ключей берётся википедия (бесплатно, но только энциклопедия)
+async function webSearch(env, q) {
+  q = String(q || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!q) return [];
+  try {
+    if (env.TAVILY_KEY) {
+      const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ api_key: env.TAVILY_KEY, query: q, max_results: 5, search_depth: 'basic' }) });
+      if (r.ok) { const j = await r.json(); return (j.results || []).slice(0, 5).map((x) => ({ title: String(x.title || x.url).slice(0, 120), url: String(x.url), text: String(x.content || '').slice(0, 700) })); }
+    }
+    if (env.BRAVE_KEY) {
+      const r = await fetch('https://api.search.brave.com/res/v1/web/search?count=5&q=' + encodeURIComponent(q), { headers: { 'accept': 'application/json', 'x-subscription-token': env.BRAVE_KEY } });
+      if (r.ok) { const j = await r.json(); return ((j.web && j.web.results) || []).slice(0, 5).map((x) => ({ title: String(x.title || x.url).slice(0, 120), url: String(x.url), text: String(x.description || '').replace(/<[^>]+>/g, '').slice(0, 700) })); }
+    }
+    const lang = /[а-яё]/i.test(q) ? 'ru' : 'en';
+    const r = await fetch('https://' + lang + '.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrlimit=4&prop=extracts&exintro=1&explaintext=1&exchars=700&origin=*&gsrsearch=' + encodeURIComponent(q));
+    if (r.ok) {
+      const j = await r.json(); const pages = (j.query && j.query.pages) ? Object.values(j.query.pages).sort((a, b) => a.index - b.index) : [];
+      return pages.slice(0, 4).map((p) => ({ title: String(p.title), url: 'https://' + lang + '.wikipedia.org/wiki/' + encodeURIComponent(String(p.title).replace(/ /g, '_')), text: String(p.extract || '').slice(0, 700) })).filter((x) => x.text);
+    }
+  } catch (e) { /* поиск не обязателен */ }
+  return [];
+}
+
+const THINK_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'];
+
+async function chatLlm(env, models, messages, extra, opts) {
+  opts = opts || {};
   let last = 'нет моделей';
   // персонализация и контекст проекта от пользователя дополняют системную подсказку, но не отменяют её
-  const system = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (extra ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + extra : '');
+  const system = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (extra ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + extra : '') + (opts.system ? '\n\n' + opts.system : '');
   for (const model of models) {
+    const body = { model: model, max_tokens: opts.maxTokens || 1500, temperature: 0.6, messages: [{ role: 'system', content: system }].concat(messages) };
+    if (opts.think && /gpt-oss/.test(model)) body.reasoning_effort = 'high';
     const r = await fetch(API, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + env.GROQ_API_KEY },
-      body: JSON.stringify({ model: model, max_tokens: 1500, temperature: 0.6, messages: [{ role: 'system', content: system }].concat(messages) })
+      body: JSON.stringify(body)
     });
     if (!r.ok) { last = 'groq ' + r.status + ' (' + model + ')'; if ([400, 403, 404, 429].includes(r.status)) continue; break; }
     const j = await r.json();
@@ -754,11 +782,25 @@ export default {
           if (g >= GLOBAL_DAY) return reply(503, { error: 'busy', detail: 'на сегодня общий лимит ии исчерпан, попробуй завтра' }, origin);
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
-        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
-        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000));
-        if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat([nowMs]).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + 1), { expirationTtl: 172800 })]);
+        const think = !!body.think && !vision;
+        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : think ? list(env.MODEL_THINK, THINK_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
+        // поиск в интернете: ищем по последнему вопросу и даём модели найденные выдержки
+        let sources = [], sysExtra = '';
+        if (body.search && !vision) {
+          const found = await webSearch(env, msgs[msgs.length - 1].content);
+          if (found.length) {
+            sources = found.map((x) => ({ title: x.title, url: x.url }));
+            sysExtra += 'Результаты поиска в интернете (используй их для актуальных фактов, ссылайся на номера вида [1], не выдумывай того, чего в них нет):\n' + found.map((x, i) => '[' + (i + 1) + '] ' + x.title + ' — ' + x.url + '\n' + x.text).join('\n\n');
+          } else sysExtra += 'Поиск в интернете ничего не нашёл. Скажи об этом и ответь по своим знаниям, предупредив, что данные могут быть устаревшими.';
+        }
+        const ctx = String(body.context || '').slice(0, 9000);
+        if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
+        if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000), { system: sysExtra, think: think, maxTokens: think ? 3500 : 1500 });
+        const used2 = think ? 2 : 1;
+        if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(think ? [nowMs, nowMs] : [nowMs]).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {
-          answer: answer, vision: vision, left: env.KV ? Math.max(0, limit - used - 1) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat([nowMs]), limit), full: nowMs + WIN_MS,
+          answer: answer, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(think ? [nowMs, nowMs] : [nowMs]), limit), full: nowMs + WIN_MS,
           plan: sub ? sub.plan : 'free', period: sub ? sub.period : 'day'
         }, origin);
       }
