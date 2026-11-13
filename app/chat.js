@@ -708,6 +708,19 @@
   /* ---------- листы, уведомления, просмотр фото ---------- */
   var sheet = $('#sheet'), panel = $('#sheet-panel');
   var paneHost = null;   // на компьютере настройки открываются окном с разделами: внутренние экраны рисуются в правой части
+  // блокировка прокрутки страницы под окном: на iPhone иначе страница дёргается, когда открывается клавиатура
+  var lockY = 0;
+  function lockPage() {
+    var b = document.body; if (b.classList.contains('lock')) return;
+    lockY = window.pageYOffset || 0; b.style.top = (-lockY) + 'px'; b.classList.add('lock');
+  }
+  function unlockPage() {
+    var b = document.body; if (!b.classList.contains('lock')) return;
+    b.classList.remove('lock'); b.style.top = ''; window.scrollTo(0, lockY);
+  }
+  // страховка: если окно закрыто, а блокировка осталась, чаты перестанут листаться
+  setInterval(function () { if (document.body.classList.contains('lock') && sheet.hidden && !palEl) unlockPage(); }, 1500);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && document.body.classList.contains('lock') && sheet.hidden && !palEl) unlockPage(); });
   function openSheet(nodes, tall) {
     if (paneHost) {
       paneHost.replaceChildren.apply(paneHost, nodes.filter(function (n) { return n && !(n.classList && n.classList.contains('back')); }));
@@ -717,12 +730,12 @@
     panel.replaceChildren.apply(panel, nodes.filter(Boolean));
     panel.classList.toggle('tall', !!tall);
     panel.scrollTop = 0;
-    sheet.hidden = false; document.body.classList.add('lock');
+    sheet.hidden = false; lockPage();
     requestAnimationFrame(function () { requestAnimationFrame(function () { sheet.classList.add('show'); }); });
   }
   function closeSheet() {
     paneHost = null;
-    sheet.classList.remove('show'); document.body.classList.remove('lock');
+    sheet.classList.remove('show'); unlockPage();
     setTimeout(function () { if (!sheet.classList.contains('show')) sheet.hidden = true; }, 540);
   }
   sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
@@ -841,7 +854,7 @@
   var palEl = null;
   function closeSearch() {
     if (!palEl) return; var p = palEl; palEl = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 200);
-    document.body.classList.remove('lock');
+    if (sheet.hidden) unlockPage();
   }
   function openSearch(tabKey) {
     if (palEl) { closeSearch(); return; }
@@ -915,7 +928,7 @@
       h('div', { class: 'pal-top' }, input, x), tabBox, list,
       h('div', { class: 'pal-foot' }, hint('Esc', 'Закрыть'), hint('↑ ↓', 'Выбрать'), hint('Enter', 'Открыть'), hint('Tab', 'Сменить тип'))));
     palEl.addEventListener('pointerdown', function (e) { if (e.target === palEl) closeSearch(); });
-    document.body.append(palEl); document.body.classList.add('lock');
+    document.body.append(palEl); lockPage();
     render(); setTimeout(function () { input.focus(); }, 30);
   }
   document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); } });

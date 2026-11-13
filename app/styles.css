@@ -41,7 +41,7 @@ body {
   background: radial-gradient(120% 50% at 50% -8%, var(--glow) 0%, transparent 62%), var(--bg);
   background-attachment: fixed;
 }
-body.lock { overflow: hidden; }
+body.lock { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
 .grain {
   position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .055; mix-blend-mode: screen;
   background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -1097,3 +1097,7 @@ html[data-read="1"] .msg.ai .md p, html[data-read="1"] .msg.ai .md li { line-hei
 html[data-read="1"] .msg.ai pre, html[data-read="1"] .msg.ai code { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .grow.lk .seg3 { margin-left: auto; }
 .seg3.seg-wrap { flex-wrap: wrap; justify-content: flex-end; }
+
+/* список чатов в панели листается пальцем, не цепляет страницу; ошибка входа не двигает форму */
+.sbody { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
+.sheet .auth-err { min-height: 20px; margin-top: 2px; }
