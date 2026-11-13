@@ -463,3 +463,5 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
 .row-in { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
 .err-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .left { cursor: pointer; }
+
+.sver { margin: 6px 0 0; text-align: center; font-size: 11px; color: var(--mute2); }

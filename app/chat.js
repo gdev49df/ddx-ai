@@ -586,7 +586,7 @@
         nav('folder', 'новый проект', function () { setDrawer(false); projectForm(null); }),
         nav('user', 'персонализация', function () { setDrawer(false); openPersonal(); }),
         nav('star', 'подписки', function () { setDrawer(false); openPlans(); })),
-      searchBox, body, foot);
+      searchBox, body, foot, h('p', { class: 'sver', text: VERSION }));
     sideUI = { input: input, fill: fill, show: showSearch };
   }
 
@@ -762,7 +762,7 @@
         twice('удалить все чаты', 'точно удалить? нажми ещё раз', function () {
           S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
         }, 'danger')),
-      h('p', { class: 'foot', text: 'DDX AI ' + VERSION + ' · Создано @bauyrzhanov_12_' })
+      h('p', { class: 'foot', text: 'DDX AI ' + VERSION })
     ]);
   }
 
@@ -930,6 +930,7 @@
   });
 
   /* ---------- шапка, подсказки, клавиатура, заставка ---------- */
+  $('#ver').textContent = 'DDX AI ' + VERSION;
   $('#chats').append(icon('list')); $('#chats').addEventListener('click', function () { openChats(); });
   $('#newchat').append(icon('plus')); $('#newchat').addEventListener('click', function () { newChat(S.cur ? (curChat() || {}).project : S.pendingProject); });
   $('#left').addEventListener('click', function () { openPlans(); });
