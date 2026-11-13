@@ -30,7 +30,7 @@
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
         const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
-        const answer = await chatLlm(env, models, out);
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000));
         if (env.KV) await Promise.all([env.KV.put(usedKey, String(used + 1), { expirationTtl: 172800 }), env.KV.put(gk, String(g + 1), { expirationTtl: 172800 })]);
         return reply(200, { answer: answer, vision: vision, left: env.KV ? Math.max(0, limit - used - 1) : undefined, limit: env.KV ? limit : undefined }, origin);
       }

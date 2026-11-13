@@ -44,13 +44,15 @@ const CHAT_SYSTEM = 'Ты DDX AI, дружелюбный помощник. От�
   + 'Можно использовать markdown: списки, **жирный**, `код`, блоки кода и простые таблицы. Не выдумывай факты: если не уверен, скажи об этом.';
 const CHAT_IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
-async function chatLlm(env, models, messages) {
+async function chatLlm(env, models, messages, extra) {
   let last = 'нет моделей';
+  // персонализация и контекст проекта от пользователя дополняют системную подсказку, но не отменяют её
+  const system = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (extra ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + extra : '');
   for (const model of models) {
     const r = await fetch(API, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + env.GROQ_API_KEY },
-      body: JSON.stringify({ model: model, max_tokens: 1500, temperature: 0.6, messages: [{ role: 'system', content: env.CHAT_SYSTEM || CHAT_SYSTEM }].concat(messages) })
+      body: JSON.stringify({ model: model, max_tokens: 1500, temperature: 0.6, messages: [{ role: 'system', content: system }].concat(messages) })
     });
     if (!r.ok) { last = 'groq ' + r.status + ' (' + model + ')'; if ([400, 403, 404, 429].includes(r.status)) continue; break; }
     const j = await r.json();
@@ -595,7 +597,7 @@ export default {
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
         const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
-        const answer = await chatLlm(env, models, out);
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000));
         if (env.KV) await Promise.all([env.KV.put(usedKey, String(used + 1), { expirationTtl: 172800 }), env.KV.put(gk, String(g + 1), { expirationTtl: 172800 })]);
         return reply(200, { answer: answer, vision: vision, left: env.KV ? Math.max(0, limit - used - 1) : undefined, limit: env.KV ? limit : undefined }, origin);
       }

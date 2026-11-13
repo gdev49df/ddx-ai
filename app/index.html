@@ -32,18 +32,20 @@
 
   <div class="app">
     <header class="bar">
-      <div class="brand" id="brand">
-        <div>
-          <p class="label">личный помощник</p>
-          <h1>DDX AI</h1>
-        </div>
+      <button class="icon-btn" id="chats" type="button" aria-label="чаты"></button>
+      <div class="brand">
+        <p class="label" id="kicker">личный помощник</p>
+        <h1 id="title">DDX AI</h1>
       </div>
-      <button class="icon-btn" id="menu" type="button" aria-label="настройки"></button>
+      <div class="bar-r">
+        <button class="icon-btn" id="newchat" type="button" aria-label="новый чат"></button>
+        <button class="icon-btn" id="menu" type="button" aria-label="настройки"></button>
+      </div>
     </header>
     <main id="view">
       <div class="hero" id="hero" hidden>
         <p class="mark" aria-hidden="true">ASK</p>
-        <p class="mark-cap">спроси что угодно или пришли фото: разберу, объясню, переведу, помогу придумать.</p>
+        <p class="mark-cap" id="hero-cap">спроси что угодно или пришли фото: разберу, объясню, переведу, помогу придумать.</p>
         <div class="chips scroll" id="chips"></div>
         <p class="foot">Создано @bauyrzhanov_12_</p>
       </div>

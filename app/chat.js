@@ -5,8 +5,8 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.0';
-  var KEY = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left';
+  var VERSION = 'v1.1';
+  var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
   var HINTS = ['объясни, как работает инфляция', 'идея подарка до 10 000 ₸', 'план тренировок на неделю', 'что на фото? прикрепи снимок'];
@@ -45,7 +45,17 @@
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.4M12 18.1v2.4M3.5 12h2.4M18.1 12h2.4M6 6l1.7 1.7M16.3 16.3L18 18M18 6l-1.7 1.7M7.7 16.3L6 18"/>',
     copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
-    refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'
+    refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>',
+    list: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+    plus: '<path d="M12 4.5v15M4.5 12h15"/>',
+    pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
+    folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+    more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+    down: '<path d="M6 9.5l6 6 6-6"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',
+    trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l.8 12.5h8.4L17 7M10.5 11v5M13.5 11v5"/>',
+    user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>'
   };
   function icon(name) {
     var s = document.createElement('span');
@@ -70,30 +80,71 @@
   }
 
   /* ---------- состояние ---------- */
-  var msgs = [], atts = [], busy = false, thinkEl = null, errEl = null, lastLeft = null;
+  // S.chats: чаты, S.projects: папки с общим контекстом, S.cur: открытый чат (null: новый, ещё не создан)
+  var S = { chats: [], projects: [], cur: null, pendingProject: null, open: {}, settings: { name: '', about: '', style: 'normal', extra: '' } };
+  var atts = [], busy = false, busyChat = null, thinkEl = null, errEl = null, lastLeft = null;
   var device = ls.get(KEY_DEV);
   if (!device) { device = (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); ls.set(KEY_DEV, device); }
 
+  var curChat = function () { return S.cur ? S.chats.filter(function (c) { return c.id === S.cur; })[0] || null : null; };
+  var projectById = function (id) { return id ? S.projects.filter(function (p) { return p.id === id; })[0] || null : null; };
+  var curMsgs = function () { var c = curChat(); return c ? c.msgs : []; };
+
+  function cleanMsgs(list) {
+    return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
+      .map(function (m) { return { id: uid(), role: m.role, text: String(m.text != null ? m.text : (m.content || '')), thumbs: Array.isArray(m.thumbs) ? m.thumbs : [] }; });
+  }
   function load() {
-    var list = [];
-    try { list = JSON.parse(ls.get(KEY) || 'null') || []; } catch (e) { list = []; }
-    if (!list.length) {
-      // перенос из первой версии, где хранился только текст
-      try { list = (JSON.parse(ls.get(KEY_OLD) || '[]') || []).map(function (m) { return { role: m.role, text: m.content, thumbs: [] }; }); } catch (e2) { list = []; }
+    var d = null;
+    try { d = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { d = null; }
+    if (d && Array.isArray(d.chats)) {
+      S.chats = d.chats.map(function (c) {
+        return { id: c.id || uid(), title: String(c.title || 'чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), msgs: cleanMsgs(c.msgs) };
+      });
+      S.projects = (Array.isArray(d.projects) ? d.projects : []).map(function (p) { return { id: p.id || uid(), name: String(p.name || 'проект'), instructions: String(p.instructions || ''), created: p.created || Date.now() }; });
+      S.settings = Object.assign(S.settings, d.settings || {});
+      S.cur = S.chats.some(function (c) { return c.id === d.cur; }) ? d.cur : null;
+      S.open = d.open && typeof d.open === 'object' ? d.open : {};
+    } else {
+      // перенос из прошлых версий, где был один общий чат
+      var old = [];
+      try { old = JSON.parse(ls.get(KEY_V2) || 'null') || JSON.parse(ls.get(KEY_OLD) || '[]') || []; } catch (e2) { old = []; }
+      var msgs = cleanMsgs(old);
+      if (msgs.length) {
+        var first = msgs.filter(function (m) { return m.role === 'user'; })[0];
+        var c0 = { id: uid(), title: makeTitle(first ? first.text : ''), pinned: false, project: null, created: Date.now(), updated: Date.now(), msgs: msgs };
+        S.chats = [c0]; S.cur = c0.id;
+      }
     }
-    msgs = list.filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
-      .map(function (m) { return { id: uid(), role: m.role, text: String(m.text || ''), thumbs: Array.isArray(m.thumbs) ? m.thumbs : [] }; });
     try { var l = JSON.parse(ls.get(KEY_LEFT) || 'null'); if (l && l.day === dayStr()) lastLeft = l; } catch (e3) { /* нет данных */ }
   }
+  function pack(stripThumbs) {
+    return JSON.stringify({
+      v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
+      chats: S.chats.slice(0, 150).map(function (c) {
+        return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated,
+          msgs: c.msgs.slice(-80).map(function (m) { return { role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []) }; }) };
+      })
+    });
+  }
   function save() {
-    var data = msgs.slice(-60).map(function (m) { return { role: m.role, text: m.text, thumbs: m.thumbs || [] }; });
-    if (!ls.set(KEY, JSON.stringify(data))) {
-      // память переполнена: оставляем только текст
-      data.forEach(function (m) { m.thumbs = []; });
-      ls.set(KEY, JSON.stringify(data));
-    }
+    if (ls.set(KEY, pack(false))) return;
+    // память переполнена: сначала убираем превью фото
+    if (!ls.set(KEY, pack(true))) toast('не хватает памяти: удали старые чаты');
   }
   function dayStr() { return new Date().toISOString().slice(0, 10); }
+  function makeTitle(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return 'фото';
+    return t.length > 42 ? t.slice(0, 40).trim() + '…' : t;
+  }
+  function when(ts) {
+    var d = new Date(ts), n = new Date(), day = function (x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); };
+    var diff = Math.round((day(n) - day(d)) / 86400000);
+    if (diff <= 0) return 'сегодня';
+    if (diff === 1) return 'вчера';
+    return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+  }
 
   /* ---------- markdown без innerHTML ---------- */
   function mdInline(text, into) {
@@ -196,15 +247,23 @@
     return el;
   }
 
-  function showHero() {
-    var empty = !msgs.length && !thinkEl;
-    hero.hidden = !empty;
+  // шапка показывает название открытого чата и проект
+  function updateHeader() {
+    var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
+    $('#title').textContent = c ? c.title : 'DDX AI';
+    $('#kicker').textContent = pr ? pr.name : (c ? 'чат' : 'личный помощник');
+    $('#hero-cap').textContent = pr
+      ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
+      : 'спроси что угодно или пришли фото: разберу, объясню, переведу, помогу придумать.';
   }
+  function showHero() { hero.hidden = !!(curMsgs().length || thinkEl); }
   function renderAll() {
+    thinkEl = null; errEl = null;
     chat.replaceChildren();
-    msgs.forEach(function (m) { chat.append(msgEl(m, false)); });
-    showHero();
-    showLeft();
+    curMsgs().forEach(function (m) { chat.append(msgEl(m, false)); });
+    updateHeader();
+    if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
+    showHero(); showLeft();
   }
   function toBottom(smooth) { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
@@ -216,12 +275,12 @@
     el.classList.toggle('warn', lastLeft.left <= 0);
   }
 
-  function setThinking(on) {
+  function setThinking(on, quiet) {
     if (thinkEl) { thinkEl.remove(); thinkEl = null; }
     if (on) {
-      thinkEl = h('div', { class: 'msg ai thinking rise', role: 'status' }, logo('logo think'), h('span', { text: 'думаю…' }));
+      thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), h('span', { text: 'думаю…' }));
       chat.append(thinkEl);
-      toBottom(true);
+      if (!quiet) toBottom(true);
     }
     showHero();
   }
@@ -236,8 +295,10 @@
 
   /* ---------- листы, уведомления, просмотр фото ---------- */
   var sheet = $('#sheet'), panel = $('#sheet-panel');
-  function openSheet(nodes) {
+  function openSheet(nodes, tall) {
     panel.replaceChildren.apply(panel, nodes);
+    panel.classList.toggle('tall', !!tall);
+    panel.scrollTop = 0;
     sheet.hidden = false; document.body.classList.add('lock');
     requestAnimationFrame(function () { requestAnimationFrame(function () { sheet.classList.add('show'); }); });
   }
@@ -265,6 +326,198 @@
   }
   function closeView() { if (viewEl) { viewEl.remove(); viewEl = null; } }
 
+  // кнопка, которой нужно нажать дважды (для необратимых действий)
+  function twice(label, sure, fn, cls) {
+    var b = h('button', { class: 'btn block opt' + (cls ? ' ' + cls : ''), type: 'button' }, h('span', { text: label }), icon('trash')), armed = false;
+    b.addEventListener('click', function () {
+      if (!armed) { armed = true; b.firstChild.textContent = sure; setTimeout(function () { armed = false; b.firstChild.textContent = label; }, 3500); return; }
+      fn();
+    });
+    return b;
+  }
+  function backLink(fn) { return h('button', { class: 'link back', type: 'button', text: '← назад', onclick: fn }); }
+  function field(tag, attrs) { return h(tag, Object.assign({ class: tag === 'textarea' ? 'area' : 'field', autocomplete: 'off', autocapitalize: 'off' }, attrs)); }
+  var byUpdated = function (a, b) { return b.updated - a.updated; };
+
+  /* ---------- чаты, проекты, закрепление ---------- */
+  function newChat(projectId) {
+    S.cur = null; S.pendingProject = projectId || null; clearError(); atts = []; renderAtts();
+    save(); renderAll(); syncSend(); window.scrollTo(0, 0);
+    if (!coarse) ta.focus();
+  }
+  function openChat(id) { S.cur = id; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
+  function ensureChat() {
+    var c = curChat();
+    if (c) return c;
+    c = { id: uid(), title: 'новый чат', pinned: false, project: S.pendingProject || null, created: Date.now(), updated: Date.now(), msgs: [] };
+    S.chats.unshift(c); S.cur = c.id; S.pendingProject = null;
+    return c;
+  }
+  function deleteChat(c) {
+    S.chats = S.chats.filter(function (x) { return x.id !== c.id; });
+    if (S.cur === c.id) S.cur = null;
+    save(); renderAll();
+  }
+
+  function chatRow(c) {
+    var pr = projectById(c.project);
+    var main = h('button', { class: 'row-main', type: 'button', onclick: function () { openChat(c.id); closeSheet(); } },
+      h('span', { class: 'row-t', text: c.title }), h('span', { class: 'row-m', text: (pr ? pr.name + ' · ' : '') + when(c.updated) }));
+    var more = h('button', { class: 'row-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
+    more.addEventListener('click', function () { chatMenu(c); });
+    return h('div', { class: 'row' + (c.id === S.cur ? ' cur' : '') }, c.pinned ? h('span', { class: 'row-pin' }, icon('pin')) : null, main, more);
+  }
+  function folderRow(p, box) {
+    var chats = S.chats.filter(function (c) { return c.project === p.id; }).sort(byUpdated);
+    var ch = h('span', { class: 'ch' + (S.open[p.id] ? ' open' : '') }, icon('down'));
+    var main = h('button', { class: 'row-main', type: 'button' }, h('span', { class: 'fi' }, icon('folder')),
+      h('span', { class: 'row-t', text: p.name }), h('span', { class: 'row-m', text: String(chats.length) }), ch);
+    var kids = h('div', { class: 'kids' });
+    var fill = function () {
+      kids.replaceChildren();
+      chats.forEach(function (c) { kids.append(chatRow(c)); });
+      if (!chats.length) kids.append(h('p', { class: 'cap', text: 'пока пусто' }));
+      kids.append(h('button', { class: 'link', type: 'button', text: '+ новый чат в проекте', onclick: function () { newChat(p.id); closeSheet(); } }));
+    };
+    main.addEventListener('click', function () {
+      S.open[p.id] = !S.open[p.id]; save();
+      ch.classList.toggle('open', S.open[p.id]); kids.hidden = !S.open[p.id];
+    });
+    fill(); kids.hidden = !S.open[p.id];
+    var more = h('button', { class: 'row-more', type: 'button', 'aria-label': 'проект' }, icon('more'));
+    more.addEventListener('click', function () { projectForm(p); });
+    box.append(h('div', { class: 'row folder' }, main, more), kids);
+  }
+
+  function openChats(query) {
+    var list = h('div', { class: 'stack' });
+    var search = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search', value: query || '' });
+    var fill = function () {
+      var q = search.value.trim().toLowerCase();
+      list.replaceChildren();
+      if (q) {
+        var found = S.chats.filter(function (c) { return c.title.toLowerCase().indexOf(q) >= 0 || c.msgs.some(function (m) { return m.text.toLowerCase().indexOf(q) >= 0; }); }).sort(byUpdated);
+        list.append(h('p', { class: 'label sect', text: 'найдено: ' + found.length }));
+        found.forEach(function (c) { list.append(chatRow(c)); });
+        return;
+      }
+      var pinned = S.chats.filter(function (c) { return c.pinned; }).sort(byUpdated);
+      if (pinned.length) { list.append(h('p', { class: 'label sect', text: 'закреплённые' })); pinned.forEach(function (c) { list.append(chatRow(c)); }); }
+      list.append(h('p', { class: 'label sect', text: 'проекты' }));
+      if (!S.projects.length) list.append(h('p', { class: 'cap', text: 'проект это папка для чатов с общим контекстом: например «работа» или «учёба».' }));
+      S.projects.slice().sort(function (a, b) { return b.created - a.created; }).forEach(function (p) { folderRow(p, list); });
+      var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(byUpdated);
+      list.append(h('p', { class: 'label sect', text: 'чаты' }));
+      if (!rest.length) list.append(h('p', { class: 'cap', text: S.chats.length ? 'остальные чаты лежат в проектах или закреплены' : 'пока нет чатов. напиши первый вопрос.' }));
+      rest.forEach(function (c) { list.append(chatRow(c)); });
+    };
+    search.addEventListener('input', fill);
+    fill();
+    openSheet([
+      h('h2', { text: 'чаты' }),
+      h('div', { class: 'two' },
+        h('button', { class: 'btn solid', type: 'button', text: 'новый чат', onclick: function () { newChat(null); closeSheet(); } }),
+        h('button', { class: 'btn', type: 'button', text: 'новый проект', onclick: function () { projectForm(null); } })),
+      h('div', { class: 'searchbox' }, search),
+      list
+    ], true);
+  }
+
+  function chatMenu(c) {
+    var opt = function (label, ic, fn) { var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label }), icon(ic)); b.addEventListener('click', fn); return b; };
+    var pr = projectById(c.project);
+    openSheet([
+      backLink(function () { openChats(); }),
+      h('h2', { text: c.title }),
+      h('p', { class: 'cap', text: (pr ? 'проект «' + pr.name + '» · ' : '') + c.msgs.length + ' сообщ.' }),
+      h('div', { class: 'form' },
+        opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { c.pinned = !c.pinned; save(); openChats(); }),
+        opt('переименовать', 'edit', function () { renameChat(c); }),
+        opt(pr ? 'перенести в другой проект' : 'в проект', 'folder', function () { moveChat(c); }),
+        twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); openChats(); }, 'danger'))
+    ]);
+  }
+  function renameChat(c) {
+    var inp = field('input', { type: 'text', maxlength: '60', value: c.title, 'aria-label': 'название чата' });
+    var ok = function () { var t = inp.value.trim(); if (t) { c.title = t.slice(0, 60); save(); updateHeader(); } openChats(); };
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') ok(); });
+    openSheet([backLink(function () { chatMenu(c); }), h('h2', { text: 'название' }),
+      h('div', { class: 'form' }, inp, h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))]);
+  }
+  function moveChat(c) {
+    var box = h('div', { class: 'form' });
+    var put = function (label, id) {
+      var on = (c.project || null) === id;
+      var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label }), on ? icon('check') : icon(id ? 'folder' : 'list'));
+      b.addEventListener('click', function () { c.project = id; save(); updateHeader(); openChats(); });
+      box.append(b);
+    };
+    put('без проекта', null);
+    S.projects.forEach(function (p) { put(p.name, p.id); });
+    box.append(h('button', { class: 'btn block ghost', type: 'button', text: '+ новый проект', onclick: function () { projectForm(null, c); } }));
+    openSheet([backLink(function () { chatMenu(c); }), h('h2', { text: 'в проект' }), box]);
+  }
+  // p: существующий проект или null (создание); moveIn: чат, который сразу положить в новый проект
+  function projectForm(p, moveIn) {
+    var name = field('input', { type: 'text', maxlength: '40', placeholder: 'название проекта', value: p ? p.name : '', 'aria-label': 'название проекта' });
+    var instr = field('textarea', { rows: '5', maxlength: '800', placeholder: 'о чём проект и как отвечать в нём. например: «готовлюсь к экзамену по трудовому праву, объясняй с примерами»', 'aria-label': 'контекст проекта' });
+    instr.value = p ? p.instructions : '';
+    var ok = function () {
+      var n = name.value.trim(); if (!n) { name.focus(); return; }
+      if (p) { p.name = n.slice(0, 40); p.instructions = instr.value.trim(); }
+      else { p = { id: uid(), name: n.slice(0, 40), instructions: instr.value.trim(), created: Date.now() }; S.projects.push(p); S.open[p.id] = true; if (moveIn) moveIn.project = p.id; }
+      save(); updateHeader(); openChats();
+    };
+    var nodes = [backLink(function () { openChats(); }), h('h2', { text: p ? 'проект' : 'новый проект' }),
+      h('div', { class: 'form' }, name, instr,
+        h('p', { class: 'cap', text: 'этот текст добавляется к каждому чату проекта, чтобы ии помнил контекст.' }),
+        h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))];
+    if (p) nodes[2].append(twice('удалить проект', 'точно удалить? чаты останутся', function () {
+      S.chats.forEach(function (c) { if (c.project === p.id) c.project = null; });
+      S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); save(); updateHeader(); openChats();
+    }, 'danger'));
+    openSheet(nodes);
+  }
+
+  /* ---------- персонализация и настройки ---------- */
+  var STYLES = [['short', 'коротко'], ['normal', 'обычно'], ['long', 'подробно']];
+  function openPersonal() {
+    var st = S.settings, style = st.style || 'normal';
+    var name = field('input', { type: 'text', maxlength: '40', placeholder: 'как к тебе обращаться', value: st.name || '', 'aria-label': 'имя' });
+    var about = field('textarea', { rows: '4', maxlength: '500', placeholder: 'чем занимаешься, что интересно, что важно знать обо мне', 'aria-label': 'о тебе' });
+    var extra = field('textarea', { rows: '4', maxlength: '600', placeholder: 'свои правила для ответов: например «без воды», «примеры из жизни», «отвечай на казахском»', 'aria-label': 'свои инструкции' });
+    about.value = st.about || ''; extra.value = st.extra || '';
+    var seg = h('div', { class: 'seg' }, STYLES.map(function (x) {
+      var b = h('button', { type: 'button', class: x[0] === style ? 'on' : '', text: x[1] });
+      b.addEventListener('click', function () { style = x[0]; seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
+      return b;
+    }));
+    var ok = function () {
+      S.settings = { name: name.value.trim(), about: about.value.trim(), style: style, extra: extra.value.trim() };
+      save(); closeSheet(); toast('сохранено');
+    };
+    openSheet([backLink(openMenu), h('h2', { text: 'персонализация' }),
+      h('p', { class: 'cap', text: 'ии учитывает это во всех чатах. хранится только на твоём телефоне и отправляется вместе с вопросом.' }),
+      h('div', { class: 'form' },
+        h('p', { class: 'label', text: 'имя' }), name,
+        h('p', { class: 'label', text: 'о тебе' }), about,
+        h('p', { class: 'label', text: 'длина ответов' }), seg,
+        h('p', { class: 'label', text: 'свои инструкции' }), extra,
+        h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))]);
+  }
+  // то, что уходит в воркер вместе с вопросом
+  function buildInstructions(c) {
+    var st = S.settings, out = [];
+    if (st.name) out.push('Пользователя зовут ' + st.name + '.');
+    if (st.about) out.push('О пользователе: ' + st.about);
+    if (st.style === 'short') out.push('Отвечай максимально коротко.');
+    if (st.style === 'long') out.push('Отвечай подробно, с пояснениями и примерами.');
+    if (st.extra) out.push('Пожелания пользователя к ответам: ' + st.extra);
+    var pr = projectById(c ? c.project : null);
+    if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
+    return out.join('\n').slice(0, 1900);
+  }
+
   function openMenu() {
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
     var seg = h('div', { class: 'seg' }, [['dark', 'тёмная'], ['light', 'светлая'], ['auto', 'авто']].map(function (x) {
@@ -272,17 +525,17 @@
       b.addEventListener('click', function () { WTheme.set(x[0], true); seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
       return b;
     }));
-    var wipe = h('button', { class: 'btn block', type: 'button', text: 'очистить чат' });
-    var armed = false;
-    wipe.addEventListener('click', function () {
-      if (!armed) { armed = true; wipe.textContent = 'точно очистить? нажми ещё раз'; setTimeout(function () { armed = false; wipe.textContent = 'очистить чат'; }, 3500); return; }
-      msgs = []; save(); clearError(); setThinking(false); renderAll(); closeSheet();
-    });
+    var pers = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: 'персонализация' }), icon('user'));
+    pers.addEventListener('click', openPersonal);
     openSheet([
       h('h2', { text: 'настройки' }),
       h('div', { class: 'form' },
+        h('p', { class: 'label', text: 'ии' }), pers,
         h('p', { class: 'label', text: 'тема' }), seg,
-        h('p', { class: 'label', text: 'чат' }), wipe),
+        h('p', { class: 'label', text: 'данные' }),
+        twice('удалить все чаты', 'точно удалить? нажми ещё раз', function () {
+          S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
+        }, 'danger')),
       h('p', { class: 'foot', text: 'DDX AI ' + VERSION + ' · Создано @bauyrzhanov_12_' })
     ]);
   }
@@ -363,18 +616,21 @@
     text = String(text == null ? ta.value : text).trim();
     if (!text && !atts.length) return;
     clearError();
+    var c = ensureChat(), first = !c.msgs.length;
     var m = { id: uid(), role: 'user', text: text, thumbs: atts.map(function (a) { return a.thumb; }), full: atts.map(function (a) { return a.full; }) };
-    msgs.push(m); save();
+    c.msgs.push(m); c.updated = Date.now();
+    if (first) c.title = makeTitle(text);
+    save();
     ta.value = ''; atts = []; renderAtts(); grow(); syncSend();
-    hero.hidden = true;
+    hero.hidden = true; updateHeader();
     chat.append(msgEl(m, true));
     toBottom(true);
     request();
   }
 
   // фото уходят с последним сообщением, где они были (если оно недавнее), чтобы можно было задавать уточнения
-  function buildPayload() {
-    var recent = msgs.slice(-20), imgAt = -1;
+  function buildPayload(c) {
+    var recent = c.msgs.slice(-20), imgAt = -1;
     recent.forEach(function (m, i) { if (m.role === 'user' && m.full && m.full.length && i >= recent.length - 6) imgAt = i; });
     var out = recent.map(function (m, i) {
       var o = { role: m.role, content: m.text || '' };
@@ -388,36 +644,45 @@
   }
 
   function request() {
-    busy = true; syncSend(); clearError(); setThinking(true);
-    var p = buildPayload();
+    var c = curChat();
+    if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
+    busy = true; busyChat = c.id; syncSend(); clearError(); setThinking(true);
+    var p = buildPayload(c), instr = buildInstructions(c);
+    var here = function () { return S.cur === c.id; };
     fitImages(p.images).then(function (imgs) {
       if (p.imgAt >= 0) p.list[p.imgAt].images = imgs;
       var ctl = window.AbortController ? new AbortController() : null, timer = setTimeout(function () { if (ctl) ctl.abort(); }, 75000);
+      var body = { mode: 'chat', messages: p.list, device: device };
+      if (instr) body.instructions = instr;
       return fetch(API, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl ? ctl.signal : undefined,
-        body: JSON.stringify({ mode: 'chat', messages: p.list, device: device })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
       }).then(function (r) { clearTimeout(timer); return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); },
         function (e) { clearTimeout(timer); throw e; });
     }).then(function (x) {
-      setThinking(false);
+      if (here()) setThinking(false);
       if (x.ok && x.j.answer) {
         var m = { id: uid(), role: 'assistant', text: String(x.j.answer), thumbs: [] };
-        msgs.push(m); save();
+        c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
-        var el = msgEl(m, true); chat.append(el);
+        if (here()) {
+          var el = msgEl(m, true); chat.append(el);
+          requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+        } else toast('ответ готов в чате «' + c.title + '»');
         if (p.images.length && !x.j.vision) toast('ответ без фото: воркер ещё не обновлён');
-        requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
         return;
       }
-      var j = x.j || {};
-      if (x.st === 429) { lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); showError('лимит на сегодня исчерпан, завтра можно снова'); }
-      else if (x.st === 413) showError('фото слишком тяжёлые. убери одно или пришли поменьше');
-      else if (x.st === 403) showError('воркер не пускает этот сайт (' + location.origin + '). добавь его в ALLOWED_ORIGINS');
-      else showError('не получилось ответить: ' + (j.detail || j.error || x.st));
+      var j = x.j || {}, msg;
+      if (x.st === 429) { lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); msg = 'лимит на сегодня исчерпан, завтра можно снова'; }
+      else if (x.st === 413) msg = 'фото слишком тяжёлые. убери одно или пришли поменьше';
+      else if (x.st === 403) msg = 'воркер не пускает этот сайт (' + location.origin + '). добавь его в ALLOWED_ORIGINS';
+      else if (j.error === 'mode') msg = 'в воркере нет режима chat: задеплой worker/full-worker.js';
+      else msg = 'не получилось ответить: ' + (j.detail || j.error || x.st);
+      if (here()) showError(msg); else toast(msg);
     }).catch(function (e) {
-      setThinking(false);
-      showError(e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет');
-    }).then(function () { busy = false; syncSend(); });
+      if (here()) setThinking(false);
+      var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
+      if (here()) showError(msg); else toast(msg);
+    }).then(function () { busy = false; busyChat = null; syncSend(); });
   }
 
   sendBtn.append(icon('arrowup'));
@@ -430,15 +695,16 @@
   });
 
   /* ---------- шапка, подсказки, клавиатура, заставка ---------- */
-  $('#brand').prepend(logo('logo'));
-  var menuBtn = $('#menu'); menuBtn.append(icon('gear')); menuBtn.addEventListener('click', openMenu);
+  $('#chats').append(icon('list')); $('#chats').addEventListener('click', function () { openChats(); });
+  $('#newchat').append(icon('plus')); $('#newchat').addEventListener('click', function () { newChat(S.cur ? (curChat() || {}).project : S.pendingProject); });
+  $('#menu').append(icon('gear')); $('#menu').addEventListener('click', openMenu);
   HINTS.forEach(function (q, i) {
     $('#chips').append(h('button', { class: 'chip', type: 'button', text: q, onclick: function () { if (i === HINTS.length - 1) $('#file').click(); else send(q); } }));
   });
 
   // высота строки ввода нужна, чтобы чат не уходил под неё
-  function measure() { document.documentElement.style.setProperty('--cph', Math.round(comp.getBoundingClientRect().height) + 'px'); }
-  if (window.ResizeObserver) new ResizeObserver(measure).observe(comp);
+  function measure() { document.documentElement.style.setProperty('--cph', Math.round($('#composer').getBoundingClientRect().height) + 'px'); }
+  if (window.ResizeObserver) new ResizeObserver(measure).observe($('#composer'));
   window.addEventListener('resize', measure);
 
   // высота клавиатуры: строка ввода едет вместе с ней

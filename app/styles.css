@@ -60,8 +60,11 @@ button { cursor: pointer; }
   margin: 0 -12px; padding: calc(env(safe-area-inset-top) + 14px) 18px 14px;
   background: linear-gradient(180deg, var(--bg) 74%, transparent);
 }
-.bar .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.bar h1 { margin: 2px 0 0; font-size: 30px; font-weight: 800; letter-spacing: -.035em; line-height: 1.08; }
+.bar { gap: 10px; }
+.bar .brand { flex: 1; min-width: 0; padding-left: 4px; }
+.bar h1 { margin: 2px 0 0; font-size: 26px; font-weight: 800; letter-spacing: -.035em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-r { display: flex; gap: 8px; flex: none; }
 .label { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
 .icon-btn {
   width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0;
@@ -71,7 +74,6 @@ button { cursor: pointer; }
 .icon-btn:active { transform: scale(.96); }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 svg.logo { width: 26px; height: 26px; flex: none; }
-.bar svg.logo { width: 30px; height: 30px; color: var(--ink); }
 
 /* плитки */
 .stack { display: grid; gap: 8px; }
@@ -290,3 +292,49 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
   .thinking span { color: var(--silver); background: none; }
 }
+
+/* поля форм */
+.field, .area, .select {
+  width: 100%; min-height: 46px; padding: 11px 14px; font-size: 16px; font-weight: 400;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; transition: border-color .54s;
+}
+.area { display: block; resize: none; line-height: 1.45; }
+.field::placeholder, .area::placeholder { color: var(--mute); }
+.field:focus, .area:focus { outline: none; border-color: rgb(var(--w) / .45); }
+.cap-in .field { width: auto; border: 0; border-radius: 0; background: none; }
+.cap-in .field:focus { border: 0; }
+.sheet .cap { margin: 4px 6px 0; }
+.sheet-panel.tall { min-height: 72dvh; }
+.sheet .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.sheet .sect { margin: 18px 6px 6px; }
+.sheet .sect:first-of-type { margin-top: 14px; }
+
+/* списки чатов и проектов */
+.rows { display: grid; gap: 6px; }
+.row {
+  position: relative; display: flex; align-items: center; min-width: 0; border-radius: 16px;
+  background: var(--bg2); border: 1px solid var(--line); transition: background .54s, border-color .54s;
+}
+.row.cur { border-color: rgb(var(--w) / .38); }
+.row-main { flex: 1; min-width: 0; display: grid; gap: 2px; padding: 12px 6px 12px 14px; background: none; border: 0; text-align: left; }
+.row-t { font-size: 16px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-m { font-size: 12.5px; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-more { width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; background: none; border: 0; color: var(--mute); border-radius: 50%; }
+.row-more svg.i { width: 20px; height: 20px; }
+.row-more:active { color: var(--ink); }
+.row-pin { width: 18px; flex: none; margin-left: 12px; margin-right: -6px; display: grid; place-items: center; color: var(--silver); }
+.row-pin svg.i { width: 15px; height: 15px; }
+.row.folder .row-main { grid-template-columns: auto 1fr auto auto; align-items: center; gap: 0 12px; }
+.row.folder .fi { width: 22px; height: 22px; color: var(--silver); }
+.row.folder .fi svg.i { width: 22px; height: 22px; }
+.row.folder .ch { color: var(--mute); transition: transform .45s var(--ease); }
+.row.folder .ch.open { transform: rotate(180deg); }
+.row.folder .ch svg.i { width: 18px; height: 18px; }
+.kids[hidden] { display: none; }
+.kids { display: grid; gap: 6px; margin: 6px 0 4px 16px; padding-left: 10px; border-left: 1px solid var(--line-top); }
+.kids .link { justify-self: start; min-height: 34px; }
+.sheet .opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; }
+.sheet .opt.danger { color: var(--err); }
+.sheet .opt svg.i { width: 18px; height: 18px; color: var(--mute); }
+.sheet .back { justify-self: start; margin-left: -4px; }
+.searchbox { margin-top: 14px; }
