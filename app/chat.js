@@ -978,7 +978,7 @@
         nav('folder', 'новый проект', function () { setDrawer(false); projectForm(null); }),
         nav('user', 'персонализация', function () { setDrawer(false); openPersonal(); }),
         nav('star', 'тарифы', function () { setDrawer(false); openPlans(); })),
-      searchBox, body, foot, h('p', { class: 'sver', text: VERSION, raw: 1 }));
+      searchBox, body, foot);
     sideUI = { input: input, fill: fill, show: showSearch };
   }
 

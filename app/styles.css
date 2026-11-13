@@ -925,3 +925,5 @@ body { overflow-x: clip; }
 .ubar i { display: block; height: 100%; border-radius: 99px; background: var(--ink); transform-origin: left; animation: ugrow .7s var(--ease) both; }
 .ubar.warn i { background: #ff9d5c; }
 @keyframes ugrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.side { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2px); }
+.sfoot { margin-top: 4px; padding-bottom: 0; }
