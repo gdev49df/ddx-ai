@@ -138,7 +138,7 @@
         S.chats = [c0]; S.cur = c0.id;
       }
     }
-    try { var l = JSON.parse(ls.get(KEY_LEFT) || 'null'); if (l && (l.day === dayStr() || (l.plan && l.plan !== 'free'))) lastLeft = l; } catch (e3) { /* нет данных */ }
+    try { var l = JSON.parse(ls.get(KEY_LEFT) || 'null'); if (l && l.limit) { lastLeft = l; refreshLeft(); } } catch (e3) { /* нет данных */ }
     subCode = ls.get(KEY_CODE) || '';
     try { sub = subCode ? JSON.parse(ls.get(KEY_SUB) || 'null') : null; } catch (e4) { sub = null; }
   }
@@ -599,12 +599,17 @@
   }
   function toBottom(smooth) { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
+  function hm(ts) { return new Date(ts).toLocaleTimeString(window.I18N ? I18N.locale() : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+  // окно в 12 часов закончилось: лимит снова полный
+  function refreshLeft() { if (lastLeft && lastLeft.reset && Date.now() > lastLeft.reset && lastLeft.limit) { lastLeft.left = lastLeft.limit; lastLeft.reset = 0; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); } }
+  function setLeft(j, plan) { lastLeft = { day: dayStr(), left: j.left, limit: j.limit || (lastLeft ? lastLeft.limit : 0) || 0, plan: plan || j.plan || 'free', reset: j.reset || 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); }
   function showLeft() {
+    refreshLeft();
     var el = $('#left');
     if (!lastLeft) { el.hidden = true; return; }
     el.hidden = false;
     var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
-    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений на сегодня: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (paid ? (sub.period === 'year' ? ' на год' : ' в этом месяце') : '');
+    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений до сброса: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (lastLeft.reset ? ' · сброс в ' + hm(lastLeft.reset) : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
   }
 
@@ -1320,10 +1325,10 @@
     c.pinned = !c.pinned; save(); return true;
   }
   var PLANS = [
-    { id: 'free', name: 'free', price: 0, line: '10 сообщений в день' },
-    { id: 'pro', name: 'pro', price: 1090, limit: 1000 },
-    { id: 'max', name: 'max', price: 5990, limit: 3000, badge: 'популярный', hot: true },
-    { id: 'ultra', name: 'ultra', price: 11990, limit: 8000, badge: 'выгодно' }
+    { id: 'free', name: 'free', price: 0, line: '5 сообщений каждые 12 часов' },
+    { id: 'pro', name: 'pro', price: 1090, limit: 17 },
+    { id: 'max', name: 'max', price: 5990, limit: 50, badge: 'популярный', hot: true },
+    { id: 'ultra', name: 'ultra', price: 11990, limit: 135, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {
@@ -1360,7 +1365,7 @@
       var made = PLANS.map(function (p, i) {
         var cur = sub ? sub.plan === p.id : p.id === 'free', k = year ? 10 : 1, total = p.price * k;
         var msg = 'Здравствуйте! Хочу купить тариф DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(total) + ' ₸).';
-        var perMsg = p.limit ? '≈ ' + (total / (p.limit * k)).toFixed(1).replace('.', ',') + ' ₸ за сообщение' : '';
+        var perMsg = p.limit ? '≈ ' + (total / (p.limit * 60 * (year ? 12 : 1))).toFixed(1).replace('.', ',') + ' ₸ за сообщение' : '';
         var priceRow = p.price
           ? h('div', { class: 'plan-p' }, h('b', { text: money(total) }), h('i', { text: '₸' }), h('em', { text: year ? 'в год' : 'в месяц' }),
               year ? h('s', { text: money(p.price * 12) + ' ₸' }) : null)
@@ -1370,7 +1375,7 @@
           h('div', { class: 'plan-h' }, h('span', { class: 'plan-n' }, h('span', { class: 'plan-ic' }, icon(PI[p.id] || 'star')), h('span', { text: p.name })),
             h('span', { class: 'plan-tags' }, p.badge ? h('span', { class: 'plan-tag soft', text: p.badge }) : null, cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null)),
           priceRow,
-          h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? money(p.limit * k) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line })),
+          h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? p.limit + ' сообщений каждые 12 часов' : p.line })),
           h('i', { class: 'plan-sep' }),
           featureRows(p.id),
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
@@ -1401,7 +1406,7 @@
           if (x.ok && x.j.plan) {
             subCode = v; sub = { plan: x.j.plan, period: x.j.period, exp: x.j.exp };
             ls.set(KEY_CODE, subCode); ls.set(KEY_SUB, JSON.stringify(sub));
-            lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit, plan: x.j.plan }; ls.set(KEY_LEFT, JSON.stringify(lastLeft));
+            setLeft(x.j);
             showLeft(); refreshSide(); toast('Тариф ' + x.j.plan + ' включён'); openPlans(sub.period);
           } else note.textContent = x.j.error === 'expired' ? 'этот тариф уже закончился' : x.j.error === 'used' ? (x.j.detail || 'этот код уже привязан к другому аккаунту') : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
         }, function () { go.disabled = false; note.textContent = 'нет связи с воркером'; });
@@ -1703,11 +1708,8 @@
     var used = null, total = lastLeft && lastLeft.limit ? lastLeft.limit : 0;
     if (total) used = Math.max(0, Math.min(total, total - lastLeft.left));
     var pct = total ? Math.round(used / total * 100) : 0;
-    var MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-    var reset;
-    if (!sub) reset = 'Сброс каждый день в 00:00';
-    else if (sub.period === 'year') reset = sub.exp ? 'Действует до ' + new Date(sub.exp).getDate() + ' ' + MON[new Date(sub.exp).getMonth()] : 'Лимит на весь год';
-    else { var nx = new Date(); nx = new Date(nx.getFullYear(), nx.getMonth() + 1, 1); reset = 'Сброс 1 ' + MON[nx.getMonth()]; }
+    refreshLeft(); total = lastLeft && lastLeft.limit ? lastLeft.limit : 0; used = total ? Math.max(0, Math.min(total, total - lastLeft.left)) : null; pct = total ? Math.round(used / total * 100) : 0;
+    var reset = lastLeft && lastLeft.reset ? 'Сброс в ' + hm(lastLeft.reset) : 'Сброс каждые 12 часов: в 00:00 и в 12:00';
     var status = !total ? 'Данные появятся после первого сообщения.' : pct >= 100 ? 'Лимит исчерпан. Он обновится после сброса, или можно перейти на тариф выше.' : pct >= 80 ? 'Лимит почти исчерпан. Запаса хватит ненадолго.' : 'Всё идёт по плану. К сбросу у тебя ещё должен остаться запас.';
     var bar = function (p, warn) { return h('div', { class: 'ubar' + (warn ? ' warn' : '') }, h('i', { style: 'width:' + Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%' })); };
     var row = function (title, sub2, p, right, warn) {
@@ -1721,7 +1723,7 @@
       h('h2', {}, h('span', { text: 'Твоё использование' }), h('span', { class: 'utag', text: planName })),
       h('p', { class: 'ustat', text: status }),
       h('div', { class: 'ugroup' },
-        row(sub ? 'Сообщения' : 'Сегодня', reset + (total ? ' · осталось ' + lastLeft.left + ' из ' + total : ''), pct, total ? pct + '%' : '—', pct >= 80)),
+        row('Сообщения за 12 часов', reset + (total ? ' · осталось ' + lastLeft.left + ' из ' + total : ''), pct, total ? pct + '%' : '—', pct >= 80)),
       h('p', { class: 'glabel', text: 'Лимиты тарифа' }),
       h('div', { class: 'ugroup' },
         lim2('Проекты', S.projects.length, L.projects),
@@ -2311,7 +2313,7 @@
         if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
         var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
         c.msgs.push(m); c.updated = Date.now(); save();
-        if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0, plan: x.j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
+        if (typeof x.j.left === 'number') { setLeft(x.j); showLeft(); }
         if (here()) {
           var el = msgEl(m, true); chat.append(el);
           requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -2322,8 +2324,8 @@
       var j = x.j || {}, msg;
       var plans = false;
       if (x.st === 429) {
-        lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0, plan: j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft();
-        msg = sub ? 'лимит твоего тарифа исчерпан. можно взять тариф побольше' : 'лимит на сегодня исчерпан, завтра можно снова. или возьми тариф'; plans = true;
+        setLeft({ left: 0, reset: j.reset }, j.plan); showLeft(); var until = j.reset ? ' (сброс в ' + hm(j.reset) + ')' : '';
+        msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
         msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код активации не найден. введи его заново в тарифах';

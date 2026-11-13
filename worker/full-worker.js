@@ -688,9 +688,13 @@ export default {
       // вставка 2: положи прямо перед строкой  return reply(400, { error: 'mode' }, origin);
       // если раньше вставлял старую версию этой вставки, замени её целиком на эту
       if (body.mode === 'chat' || body.mode === 'sub') {
-        // тарифы: лимит сообщений в месяц; у годовой подписки лимит в 10 раз больше и считается на весь год
-        const PLANS = { pro: 1000, max: 3000, ultra: 8000 };
-        const FREE_DAY = Number(env.CHAT_LIMIT || 10);
+        // лимит считается окнами по 12 часов (сброс в 00:00 и 12:00 по TZ_OFFSET): free 5, pro 17, max 50, ultra 135 сообщений за окно.
+        // подписка на месяц или год даёт тот же лимит за окно, год просто дешевле (2 месяца в подарок)
+        const PLANS = { pro: 17, max: 50, ultra: 135 };
+        const FREE_DAY = Number(env.CHAT_LIMIT || 5);
+        const tzOff = Number(env.TZ_OFFSET || 5) * 3600000, WIN_MS = 43200000;
+        const resetAt = Math.floor((Date.now() + tzOff) / WIN_MS) * WIN_MS + WIN_MS - tzOff;
+        const winKey = new Date(Date.now() + tzOff).toISOString().slice(0, 10) + (new Date(Date.now() + tzOff).getUTCHours() < 12 ? 'a' : 'b');
         const device = String(body.device || '');
         if (env.KV && !/^[A-Za-z0-9-]{16,64}$/.test(device)) return reply(400, { error: 'device' }, origin);
         const day = dayKey(env);
@@ -711,16 +715,16 @@ export default {
           if (raw.exp && Date.now() > Number(raw.exp)) return reply(403, { error: 'expired' }, origin);
           const year = raw.period === 'year';
           sub = { plan: raw.plan, period: year ? 'year' : 'month', exp: raw.exp || null };
-          limit = PLANS[raw.plan] * (year ? 10 : 1);
-          usedKey = year ? 'u:' + code : 'u:' + code + ':' + day.slice(0, 7);
+          limit = PLANS[raw.plan];
+          usedKey = 'w:' + code + ':' + winKey;
         } else if (env.KV) {
-          usedKey = user ? 'c:u' + user.id + ':' + day : 'c:' + device + ':' + day;
+          usedKey = user ? 'c:u' + user.id + ':' + winKey : 'c:' + device + ':' + winKey;
         }
         const used = usedKey ? num(await env.KV.get(usedKey)) : 0;
-        const ttl = sub && sub.period === 'year' ? 34000000 : 3000000;
+        const ttl = 90000;
         if (body.mode === 'sub') {
           if (!sub) return reply(403, { error: 'code' }, origin);
-          return reply(200, { plan: sub.plan, period: sub.period, exp: sub.exp, left: Math.max(0, limit - used), limit: limit }, origin);
+          return reply(200, { plan: sub.plan, period: sub.period, exp: sub.exp, left: Math.max(0, limit - used), limit: limit, reset: resetAt }, origin);
         }
         const msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-20)
           .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -739,7 +743,7 @@ export default {
           : { role: m.role, content: m.content }));
         let gk = null, g = 0;
         if (env.KV) {
-          if (used >= limit) return reply(429, { error: 'limit', plan: sub ? sub.plan : 'free' }, origin);
+          if (used >= limit) return reply(429, { error: 'limit', plan: sub ? sub.plan : 'free', reset: resetAt }, origin);
           gk = 'g:' + day;
           g = num(await env.KV.get(gk));
           if (g >= GLOBAL_DAY) return reply(503, { error: 'busy', detail: 'на сегодня общий лимит ии исчерпан, попробуй завтра' }, origin);
@@ -747,9 +751,9 @@ export default {
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
         const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
         const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 2000));
-        if (env.KV) await Promise.all([env.KV.put(usedKey, String(used + 1), { expirationTtl: sub ? ttl : 172800 }), env.KV.put(gk, String(g + 1), { expirationTtl: 172800 })]);
+        if (env.KV) await Promise.all([env.KV.put(usedKey, String(used + 1), { expirationTtl: ttl }), env.KV.put(gk, String(g + 1), { expirationTtl: 172800 })]);
         return reply(200, {
-          answer: answer, vision: vision, left: env.KV ? Math.max(0, limit - used - 1) : undefined, limit: env.KV ? limit : undefined,
+          answer: answer, vision: vision, left: env.KV ? Math.max(0, limit - used - 1) : undefined, limit: env.KV ? limit : undefined, reset: resetAt,
           plan: sub ? sub.plan : 'free', period: sub ? sub.period : 'day'
         }, origin);
       }
