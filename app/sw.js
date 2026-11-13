@@ -1,5 +1,5 @@
 // при изменении файлов меняй версию, чтобы кэш обновился
-const CACHE = 'wchat-v14';
+const CACHE = 'wchat-v16';
 const FILES = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const FILES = [
   './manifest.json',
   './fonts/inter-cyrillic.woff2',
   './fonts/inter-latin.woff2',
+  './fonts/unbounded-700.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'

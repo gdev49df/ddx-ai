@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.4';
+  var VERSION = 'v1.6';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -59,6 +59,10 @@
     mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/>',
     up: '<path d="M6 14.5l6-6 6 6"/>',
     file: '<path d="M7 3.5h6.5L18 8v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V8H18"/>',
+    chev: '<path d="M9.5 6l6 6-6 6"/>',
+    gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13.5l3.5-4"/>',
+    download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+    palette: '<path d="M12 4a8 8 0 1 0 0 16c1.4 0 2-.9 2-1.8 0-1.5-1.2-1.7-1.2-2.9 0-.9.7-1.5 1.7-1.5H17a3 3 0 0 0 3-3C20 6.9 16.4 4 12 4z"/><circle cx="8" cy="11" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="15" cy="8.5" r="1"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -309,12 +313,17 @@
   var greet = '';
   function updateHeader() {
     var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
-    $('#title').textContent = c ? c.title : 'DDX AI';
+    $('#title').textContent = c ? c.title : 'DDX AI'; $('#title').classList.toggle('is-brand', !c);
     var has = !!(c && c.msgs.length); $('#find').style.display = has ? '' : 'none'; $('#more').style.display = has ? '' : 'none';
     $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
-    $('#hero-cap').textContent = cap(pr
+    var capText = cap(pr
       ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
       : (greet || (greet = pickGreeting())) + ' спроси что угодно или пришли фото.');
+    var capEl = $('#hero-cap');
+    if (capEl.getAttribute('data-t') !== capText) {
+      capEl.setAttribute('data-t', capText); capEl.replaceChildren();
+      capText.split(' ').forEach(function (w, i) { capEl.append(h('span', { class: 'cw', style: 'animation-delay:' + (180 + i * 55) + 'ms', text: w, raw: 1 }), ' '); });
+    }
   }
   function showHero() { hero.hidden = !!(curMsgs().length || thinkEl); }
   function renderAll() {
@@ -393,7 +402,7 @@
   function twice(label, sure, fn, cls) {
     var b = h('button', { class: 'btn block opt' + (cls ? ' ' + cls : ''), type: 'button' }, h('span', { text: label }), icon('trash')), armed = false;
     b.addEventListener('click', function () {
-      if (!armed) { armed = true; b.firstChild.textContent = sure; setTimeout(function () { armed = false; b.firstChild.textContent = label; }, 3500); return; }
+      if (!armed) { armed = true; b.firstChild.textContent = cap(sure); setTimeout(function () { armed = false; b.firstChild.textContent = cap(label); }, 3500); return; }
       fn();
     });
     return b;
@@ -792,11 +801,26 @@
     { id: 'ultra', name: 'ultra', price: 11990, limit: 5000, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  // цена «набегает» от нуля
+  function countUp(el) {
+    var to = parseInt(el.textContent.replace(/\s/g, ''), 10) || 0, t0 = performance.now(), dur = 650;
+    if (!to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    (function tick(now) {
+      var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = money(to * e);
+      if (k < 1) requestAnimationFrame(tick); else el.textContent = money(to);
+    })(t0);
+  }
+  // подсветка карточки за курсором
+  document.addEventListener('pointermove', function (e) {
+    var c = e.target.closest && e.target.closest('.plan'); if (!c) return;
+    var r = c.getBoundingClientRect(); c.style.setProperty('--mx', (e.clientX - r.left) + 'px'); c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
   function openPlans(period) {
     var year = period === 'year';
     var plansBox = h('div', { class: 'plans' }), segBtns = [];
     var cards = function () {
-      plansBox.replaceChildren.apply(plansBox, PLANS.map(function (p, i) {
+      var made = PLANS.map(function (p, i) {
         var cur = sub ? sub.plan === p.id : p.id === 'free', k = year ? 10 : 1, total = p.price * k;
         var msg = 'Здравствуйте! Хочу купить подписку DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(total) + ' ₸).';
         var perMsg = p.limit ? '≈ ' + (total / (p.limit * k)).toFixed(1).replace('.', ',') + ' ₸ за сообщение' : '';
@@ -813,9 +837,11 @@
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
           year && p.price ? h('p', { class: 'plan-save', text: '2 месяца в подарок' }) : null,
           p.price ? h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить' }) : null);
-      }));
+      });
+      plansBox.replaceChildren.apply(plansBox, made);
+      made.forEach(function (card) { var b = card.querySelector('.plan-p b'); if (b) countUp(b); });
     };
-    var seg = h('div', { class: 'seg two' }, [['month', 'месяц'], ['year', 'год · ×10']].map(function (x) {
+    var seg = h('div', { class: 'seg two' }, [['month', 'месяц'], ['year', 'год']].map(function (x) {
       var b = h('button', { type: 'button', class: (x[0] === 'year') === year ? 'on' : '', text: x[1] });
       b.addEventListener('click', function () {
         year = x[0] === 'year'; segBtns.forEach(function (o, j) { o.classList.toggle('on', (j === 1) === year); }); cards();
@@ -853,28 +879,74 @@
       h('div', { class: 'row-in' }, code, go), note, off], true);
   }
 
+  function backupData() { return JSON.parse(pack(false)); }
+  function exportAll() {
+    var text = JSON.stringify(backupData()), name = 'ddx-ai-копия-' + new Date().toISOString().slice(0, 10) + '.json';
+    try {
+      var file = new File([text], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Копия чатов DDX AI' }).catch(function () { /* отменили */ }); return; }
+    } catch (e0) { /* без File */ }
+    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    var a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('Копия сохранена');
+  }
+  function importAll(file) {
+    file.text().then(function (t) {
+      var d = JSON.parse(t), n = 0;
+      if (!d || !Array.isArray(d.chats)) throw new Error('bad');
+      var have = {}; S.chats.forEach(function (c) { have[c.id] = 1; });
+      d.chats.forEach(function (c) {
+        if (!c || !c.id || have[c.id]) return;
+        S.chats.push({ id: String(c.id), title: String(c.title || 'Чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), msgs: cleanMsgs(c.msgs) }); n++;
+      });
+      var hp = {}; S.projects.forEach(function (p) { hp[p.id] = 1; });
+      (Array.isArray(d.projects) ? d.projects : []).forEach(function (p) { if (p && p.id && !hp[p.id]) S.projects.push({ id: String(p.id), name: String(p.name || 'Проект'), instructions: String(p.instructions || ''), created: p.created || Date.now() }); });
+      save(); renderAll(); closeSheet(); toast(n ? 'Добавлено чатов: ' + n : 'Новых чатов в копии нет');
+    }).catch(function () { toast('Это не копия DDX AI'); });
+  }
+  var importInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
+  document.body.append(importInput);
+  importInput.addEventListener('change', function () { if (importInput.files[0]) importAll(importInput.files[0]); importInput.value = ''; });
+
+  function grow2(label, ic, value, fn, cls) {
+    var b = h('button', { class: 'grow' + (cls ? ' ' + cls : ''), type: 'button' }, icon(ic), h('span', { class: 'gl', text: label }), value ? h('span', { class: 'gv', text: value }) : null, fn ? icon('chev') : null);
+    if (fn) b.addEventListener('click', fn); else b.disabled = true;
+    return b;
+  }
   function openMenu() {
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
-    var seg = h('div', { class: 'seg' }, [['dark', 'тёмная'], ['light', 'светлая'], ['auto', 'авто']].map(function (x) {
-      var b = h('button', { type: 'button', class: x[0] === cur ? 'on' : '', text: x[1] });
-      b.addEventListener('click', function () { WTheme.set(x[0], true); seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
+    var close = h('button', { class: 'round-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); close.addEventListener('click', closeSheet);
+    var themes = h('div', { class: 'themes' }, [['light', 'Светлая'], ['dark', 'Тёмная'], ['auto', 'Системная']].map(function (x) {
+      var b = h('button', { type: 'button', class: 'theme' + (x[0] === cur ? ' on' : '') },
+        h('span', { class: 'tp ' + x[0] }, h('i'), h('i'), h('u')), h('span', { class: 'tl', text: x[1] }));
+      b.addEventListener('click', function () { WTheme.set(x[0], true); themes.querySelectorAll('.theme').forEach(function (o) { o.classList.toggle('on', o === b); }); });
       return b;
     }));
-    var pers = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: 'персонализация' }), icon('user'));
-    pers.addEventListener('click', openPersonal);
-    var subs = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: sub ? 'подписка: ' + sub.plan : 'подписки' }), icon('star'));
-    subs.addEventListener('click', function () { openPlans(); });
+    var nm = (S.settings.name || '').trim();
+    var planName = sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free';
+    var usage = lastLeft ? 'Осталось ' + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') : '';
+    var up = h('button', { class: 'grow accent', type: 'button' }, icon('plus'), h('span', { class: 'gl', text: sub ? 'Сменить тариф' : 'Улучшить тариф' })); up.addEventListener('click', function () { openPlans(); });
+    var del = twice('Удалить все чаты', 'Точно удалить? Нажми ещё раз', function () {
+      S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
+    }, 'danger');
     openSheet([
-      h('h2', { text: 'настройки' }),
-      h('div', { class: 'form' },
-        h('p', { class: 'label', text: 'ии' }), pers, subs,
-        h('p', { class: 'label', text: 'тема' }), seg,
-        h('p', { class: 'label', text: 'данные' }),
-        twice('удалить все чаты', 'точно удалить? нажми ещё раз', function () {
-          S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
-        }, 'danger')),
-      h('p', { class: 'foot', text: 'DDX AI ' + VERSION })
-    ]);
+      h('div', { class: 'shead2' }, close, h('h2', { text: 'Настройки' }), h('span', { class: 'sp' })),
+      h('div', { class: 'group acc' },
+        h('div', { class: 'acc-top' }, h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
+          h('div', { class: 'acc-t' }, h('b', { text: nm || 'DDX AI', raw: 1 }), h('span', { text: 'Тариф ' + planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : '') }))), up),
+      h('p', { class: 'glabel', text: 'Аккаунт' }),
+      h('div', { class: 'group' },
+        grow2('Персонализация', 'user', nm || '', openPersonal),
+        grow2('Подписка', 'star', planName, function () { openPlans(); }),
+        grow2('Использование', 'gauge', usage, null)),
+      h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
+      h('p', { class: 'glabel', text: 'Данные' }),
+      h('div', { class: 'group' },
+        grow2('Сохранить копию чатов', 'download', '', exportAll),
+        grow2('Загрузить копию', 'share', '', function () { importInput.click(); })),
+      h('div', { class: 'group solo' }, del),
+      h('p', { class: 'foot center', text: 'DDX AI ' + VERSION, raw: 1 })
+    ], true);
   }
 
   /* ---------- фото ---------- */
