@@ -123,6 +123,7 @@
   function cleanMsgs(list) {
     return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
       .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [],
+        img: m.img && Array.isArray(m.img.urls) ? { urls: m.img.urls.filter(function (u) { return /^https:\/\//.test(u); }).slice(0, 1), task: String(m.img.task || '').slice(0, 100), up: !!m.img.up } : null,
         alts: Array.isArray(m.alts) ? m.alts.slice(0, 2).map(function (a) { return { text: String((a && a.text) || ''), src: Array.isArray(a && a.src) ? a.src : [], at: +(a && a.at) || 0 }; }) : null, vi: +m.vi === 1 ? 1 : 0,
         next: Array.isArray(m.next) ? m.next.slice(0, 3).map(function (x) { return String(x).slice(0, 80); }) : [] }; });
   }
@@ -157,7 +158,7 @@
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
         return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
-          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
+          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [], img: m.img || null }; }) };
       })
     });
   }
@@ -506,6 +507,7 @@
       if (m.text) { var eb = h('button', { class: 'medit', type: 'button', 'aria-label': 'изменить' }, icon('edit')); eb.addEventListener('click', function (e) { e.stopPropagation(); editMsg(m, el); }); el.append(eb); }
       if (fresh) el.classList.add('rise');
     } else {
+      if (m.img && m.img.urls && m.img.urls.length) return imgMsgEl(m, fresh);
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
       if (m.src && m.src.length) el.append(h('div', { class: 'srcs' }, h('span', { class: 'srcs-t', text: 'Источники' }), m.src.map(function (s, i) {
         var host = ''; try { host = new URL(s.u).hostname.replace(/^www\./, ''); } catch (eu) { host = s.u; }
@@ -700,6 +702,90 @@
     if (typeof armLimitNote === 'function') armLimitNote();
   }
 
+  /* ---------- картинки (kie.ai): создание и улучшение ---------- */
+  var lastReqImg = false;
+  var THINK_IMG = ['рисую…', 'подбираю цвета…', 'прорисовываю детали…', 'расставляю свет…', 'почти готово…'];
+  function aspectOf(q) {
+    q = String(q).toLowerCase();
+    if (/9:16|вертикальн|для сторис|stories|обои на телефон/.test(q)) return '9:16';
+    if (/16:9|широкоформат|горизонтальн|обои на компьютер|баннер/.test(q)) return '16:9';
+    if (/2:3|портрет/.test(q)) return '2:3';
+    if (/3:2/.test(q)) return '3:2';
+    return '1:1';
+  }
+  function kiePost(body) {
+    body.device = device;
+    return fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); })
+      .then(function (x) {
+        if (x.ok) return x.j;
+        var j = x.j || {}, m;
+        if (x.st === 429) m = 'лимит картинок на сегодня исчерпан, завтра снова можно';
+        else if (j.error === 'mode') m = 'в воркере нет генерации картинок: задеплой worker/full-worker.js';
+        else if (j.error === 'no kie') m = 'в воркере нет секрета KIE_API_KEY: добавь его в настройках воркера';
+        else m = 'не получилось: ' + (j.detail || j.error || x.st);
+        throw new Error(m);
+      });
+  }
+  function kiePoll(taskId) {
+    return new Promise(function (res, rej) {
+      var n = 0;
+      (function tick() {
+        if (stopped) { var ab = new Error('stop'); ab.name = 'AbortError'; rej(ab); return; }
+        if (n++ > 70) { rej(new Error('картинка делается слишком долго, попробуй ещё раз')); return; }
+        kiePost({ mode: 'image-status', taskId: taskId }).then(function (j) {
+          if (j.state === 'success' && j.urls && j.urls.length) res(j.urls);
+          else if (j.state === 'fail') rej(new Error('не получилось нарисовать' + (j.fail ? ': ' + j.fail : '')));
+          else setTimeout(tick, 2500);
+        }, function (e) { if (n > 3) rej(e); else setTimeout(tick, 3000); });
+      })();
+    });
+  }
+  function imageRequest() {
+    stopped = false;
+    var c = curChat(), last = c && c.msgs[c.msgs.length - 1];
+    if (!c || !last || last.role !== 'user') return;
+    var q = String(last.text || '').trim();
+    if (!q) { toast('Опиши словами, что нарисовать'); return; }
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
+    var here = function () { return S.cur === c.id; };
+    kiePost({ mode: 'image', prompt: q, aspect: aspectOf(q) }).then(function (r) {
+      return kiePoll(r.taskId).then(function (urls) { return { task: r.taskId, urls: urls }; });
+    }).then(function (x) {
+      if (here()) setThinking(false);
+      var m = { id: uid(), at: Date.now(), role: 'assistant', text: '[картинка по запросу: ' + q.slice(0, 200) + ']', thumbs: [], next: [], img: { urls: x.urls.slice(0, 1), task: x.task, up: false } };
+      c.msgs.push(m); c.updated = Date.now(); save();
+      if (here()) { var el = msgEl(m, true); chat.append(el); requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
+      else toast('картинка готова в чате «' + c.title + '»');
+    }).catch(function (e) {
+      if (here()) setThinking(false);
+      if (stopped) { toast('остановил'); return; }
+      var msg = e && e.message ? e.message : 'нет связи с воркером';
+      if (here()) showError(msg); else toast(msg);
+    }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
+  }
+  function upscaleImage(m, btn) {
+    if (busy || !m.img || m.img.up) return;
+    busy = true; stopped = false; syncSend(); btn.disabled = true; btn.querySelector('span').textContent = 'Улучшаю…';
+    toast('Улучшаю картинку, это займёт до минуты');
+    kiePost({ mode: 'image-up', taskId: m.img.task }).then(function (r) { return kiePoll(r.taskId); }).then(function (urls) {
+      m.img.urls = urls.slice(0, 1); m.img.up = true; save(); renderAll(); toast('Готово, качество улучшено');
+    }).catch(function (e) {
+      if (!stopped) toast(e && e.message ? e.message : 'не получилось улучшить');
+      btn.disabled = false; btn.querySelector('span').textContent = 'Улучшить';
+    }).then(function () { busy = false; stopped = false; syncSend(); });
+  }
+  function imgMsgEl(m, fresh) {
+    var url = m.img.urls[0], el = h('div', { class: 'msg ai imgmsg' });
+    var im = h('img', { class: 'genimg', src: url, alt: 'картинка', loading: 'lazy' }); im.addEventListener('click', function () { viewPhoto(url); });
+    el.append(h('div', { class: 'genwrap' }, im));
+    var upb = h('button', { class: 'btn sm genup', type: 'button' }, icon('spark'), h('span', { text: m.img.up ? 'Улучшено' : 'Улучшить' }));
+    if (m.img.up) upb.disabled = true; else upb.addEventListener('click', function () { upscaleImage(m, upb); });
+    var dl = h('a', { class: 'btn sm', href: url, target: '_blank', rel: 'noopener noreferrer', download: 'ddx-ai-image.jpg' }, icon('download'), h('span', { text: 'Скачать' }));
+    el.append(h('div', { class: 'genbar' }, upb, dl));
+    if (fresh) el.classList.add('rise');
+    return el;
+  }
   var pendingAlt = null;
   function showSugg() {
     var bar = $('#sugg'), c = curChat(), m = c && c.msgs[c.msgs.length - 1];
@@ -718,7 +804,8 @@
     if (thinkEl) { thinkEl.remove(); thinkEl = null; }
     if (on) {
       var pool = THINK_WORDS.slice().sort(function () { return Math.random() - .5; });
-      if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
+      if (busy && lastReqImg) pool = THINK_IMG.slice();
+      else if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
       if (busy && lastReqThink) pool = THINK_DEEP.concat(pool.slice(0, 3));
       var i = 0, span = h('span', { text: pool[0] });
       thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), span);
@@ -2683,15 +2770,23 @@
     var sync = function () { web.classList.toggle('on', !!S.settings.web); web.setAttribute('aria-pressed', S.settings.web ? 'true' : 'false'); thk.classList.toggle('on', thinkOn); thk.setAttribute('aria-pressed', thinkOn ? 'true' : 'false'); };
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
-    // выбор модели: пока одна
-    var MODELS = [['liama-2.7', 'Liama 2.7', 'Быстрые и точные ответы на каждый день']];
-    var cur = MODELS[0], mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, h('span', { text: cur[1], raw: 1 }), icon('down')), mpop = null;
+    // выбор модели
+    var MODELS = [['liama', 'Liama 2.7', 'Быстрые и точные ответы на каждый день'], ['imagine', 'Imagine', 'Рисует картинки по описанию']];
+    var curM = function () { return MODELS.filter(function (m) { return m[0] === S.settings.model; })[0] || MODELS[0]; };
+    var mlab = h('span', { text: curM()[1], raw: 1 }), mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, mlab, icon('down')), mpop = null;
+    var applyModel = function () {
+      var im = S.settings.model === 'imagine';
+      mlab.textContent = curM()[1]; web.hidden = thk.hidden = im;
+      ta.placeholder = im ? 'Опиши картинку' : 'Спроси что угодно';
+    };
     var closeM = function () { if (mpop) { mpop.remove(); mpop = null; } mb.classList.remove('open'); };
     mb.addEventListener('click', function (e) {
       e.stopPropagation(); if (mpop) { closeM(); return; }
       mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
-        var it = h('button', { class: 'pi mitem on', type: 'button', role: 'menuitemradio', 'aria-checked': 'true' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), icon('check'));
-        it.addEventListener('click', closeM); return it;
+        var on = curM()[0] === m[0];
+        var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
+        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[0] === 'imagine' ? 'Imagine: опиши картинку, и я её нарисую' : 'Liama 2.7: обычный чат'); });
+        return it;
       }));
       var r = mb.getBoundingClientRect();
       mpop.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; mpop.style.left = 'auto'; mpop.style.bottom = (window.innerHeight - r.top + 8) + 'px';
@@ -2699,8 +2794,8 @@
     });
     document.addEventListener('click', function (e) { if (mpop && !mpop.contains(e.target)) closeM(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
-    bar.append(web, thk, mb); sync();
-    window.syncTools = sync;
+    bar.append(web, thk, mb); sync(); applyModel();
+    window.syncTools = function () { sync(); applyModel(); };
   })();
   // выдержки из файлов проекта, подходящие к вопросу
   function projectContext(c, q) {
@@ -2726,6 +2821,8 @@
   var reqCtl = null, stopped = false;
   function stopGen() { stopped = true; if (reqCtl) reqCtl.abort(); }
   function request() {
+    if (S.settings.model === 'imagine') { imageRequest(); return; }
+    lastReqImg = false;
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
@@ -2936,7 +3033,7 @@
     } else if (e.key === '/' && !typing && sheet.hidden) { e.preventDefault(); ta.focus(); }
   });
   buildSide();
-  load(); renderAll(); renderAtts(); grow(); syncSend(); measure();
+  load(); renderAll(); renderAtts(); grow(); syncSend(); measure(); if (window.syncTools) window.syncTools();
   if (acct) syncDown(true);
   refreshSide();
   toBottom(false);
