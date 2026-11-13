@@ -346,13 +346,9 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
 
 @media (min-width: 900px) {
   .side {
-    display: block; position: fixed; z-index: 15; left: 0; top: 0; bottom: 0; width: 300px; overflow-y: auto; padding: 24px 14px 24px;
+    display: flex; flex-direction: column; position: fixed; z-index: 15; left: 0; top: 0; bottom: 0; width: 300px; padding: 22px 10px 10px;
     background: linear-gradient(180deg, rgb(var(--w) / .025), rgb(var(--w) / 0) 40%); border-right: 1px solid var(--line);
-    scrollbar-width: thin; scrollbar-color: rgb(var(--w) / .15) transparent;
   }
-  .side .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
-  .side .sect:first-of-type { margin-top: 14px; }
-  .side .row { background: var(--card); }
   #chats { display: none; }
   .app { max-width: none; margin: 0 0 0 300px; padding: 0 32px calc(var(--cph, 72px) + 56px); }
   .bar, #view { max-width: 760px; margin-left: auto; margin-right: auto; }
@@ -375,6 +371,38 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
   .hero { padding-top: 40px; }
   .mark { font-size: 96px; }
 
+    .side-brand { margin: 2px 10px 14px; }
+  .snavs { display: grid; gap: 2px; }
+  .snav, .shead, .srow-main, .snew {
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 38px; padding: 0 10px; border: 0; background: none;
+    color: var(--ink); font-size: 14.5px; text-align: left; border-radius: 10px;
+  }
+  .snav svg.i { width: 19px; height: 19px; color: var(--silver); flex: none; }
+  .ssearch { margin: 8px 4px 0; }
+  .sbody { flex: 1; min-height: 0; overflow-y: auto; margin: 14px -4px 0; padding: 0 4px; scrollbar-width: thin; scrollbar-color: rgb(var(--w) / .15) transparent; }
+  .shead { min-height: 32px; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--mute); justify-content: flex-start; gap: 6px; }
+  .shead.static { margin: 6px 0 0; }
+  .shead .ch { display: grid; transition: transform .35s var(--ease); transform: rotate(-90deg); }
+  .shead .ch.open { transform: none; }
+  .shead .ch svg.i { width: 14px; height: 14px; }
+  .sitems, .skids { display: grid; gap: 1px; }
+  .skids { margin-left: 14px; padding-left: 6px; border-left: 1px solid var(--line-top); }
+  .srow { position: relative; display: flex; align-items: center; border-radius: 10px; }
+  .srow.cur { background: rgb(var(--w) / .09); }
+  .srow-main { flex: 1; min-width: 0; }
+  .srow-main span:not(.ch) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .srow-main svg.i { width: 18px; height: 18px; color: var(--silver); flex: none; }
+  .srow-main .ch { display: grid; color: var(--mute); transition: transform .35s var(--ease); flex: none; }
+  .srow-main .ch.open { transform: rotate(180deg); }
+  .srow-more { position: absolute; right: 2px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--mute); border-radius: 8px; opacity: 0; }
+  .srow-more svg.i { width: 18px; height: 18px; }
+  .srow.cur .srow-more, .srow:focus-within .srow-more, .srow-more.on { opacity: 1; }
+  .snew { min-height: 32px; color: var(--mute); font-size: 13.5px; }
+  .sfoot { display: flex; align-items: center; gap: 10px; position: relative; margin-top: 8px; padding: 10px 6px 2px; border-top: 1px solid var(--line); }
+  .sfoot .srow-more { position: static; }
+  .sava { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--ink); color: var(--bg); }
+  .sname { flex: 1; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* окна по центру, а не снизу */
   .sheet { align-items: center; justify-content: center; }
   .sheet-panel { max-width: 520px; max-height: 86dvh; border-radius: 24px; padding-top: 24px; transform: translateY(14px) scale(.985); }
@@ -386,6 +414,9 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
 
 /* наведение мышью */
 @media (hover: hover) {
+  .snav:hover, .shead:hover, .srow:hover, .snew:hover { background: rgb(var(--w) / .07); }
+  .srow:hover .srow-more { opacity: 1; }
+  .srow-more:hover { color: var(--ink); background: rgb(var(--w) / .1); }
   .row:hover { border-color: var(--line-top); }
   .row-main { cursor: pointer; }
   .btn:hover, .icon-btn:hover { border-color: rgb(var(--w) / .3); }

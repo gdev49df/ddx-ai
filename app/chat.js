@@ -47,6 +47,7 @@
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>',
     list: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+    chat: '<path d="M5 6.5a2.5 2.5 0 0 1 2.5-2.5h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16h-.5A2.5 2.5 0 0 1 5 13.5z"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -432,10 +433,81 @@
     var u = listUI();
     openSheet([h('h2', { text: 'чаты' }), u.top, u.search, u.list], true);
   }
-  // постоянная панель слева на широком экране
+  // постоянная панель слева на широком экране: плоский список как в claude
   function buildSide() {
-    var side = $('#side'); sideUI = listUI();
-    side.append(h('div', { class: 'side-brand' }, logo('logo'), h('span', { text: 'DDX AI' })), sideUI.top, sideUI.search, sideUI.list);
+    var side = $('#side');
+    var input = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search' });
+    var searchBox = h('div', { class: 'ssearch' }, input); searchBox.hidden = true;
+    var body = h('div', { class: 'sbody' });
+    var foot = h('div', { class: 'sfoot' });
+    var nav = function (ic, label, fn) {
+      var b = h('button', { class: 'snav', type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', fn); return b;
+    };
+    var showSearch = function () { searchBox.hidden = false; input.focus(); input.select(); };
+    var srow = function (c, pin) {
+      var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
+      more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
+      var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title }));
+      main.addEventListener('click', function () { openChat(c.id); closeSheet(); });
+      return h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : '') }, main, more);
+    };
+    var section = function (key, label, items) {
+      var off = !!S.open['s-' + key];
+      var head = h('button', { class: 'shead', type: 'button' }, h('span', { text: label }), h('span', { class: 'ch' + (off ? '' : ' open') }, icon('down')));
+      var box = h('div', { class: 'sitems' }); box.hidden = off;
+      items.forEach(function (n) { box.append(n); });
+      head.addEventListener('click', function () {
+        S.open['s-' + key] = !S.open['s-' + key]; save();
+        box.hidden = !!S.open['s-' + key]; head.lastChild.classList.toggle('open', !S.open['s-' + key]);
+      });
+      return [head, box];
+    };
+    var fill = function () {
+      var q = input.value.trim().toLowerCase();
+      body.replaceChildren();
+      var add = function (pair) { pair.forEach(function (n) { body.append(n); }); };
+      if (q) {
+        var found = S.chats.filter(function (c) { return c.title.toLowerCase().indexOf(q) >= 0 || c.msgs.some(function (m) { return m.text.toLowerCase().indexOf(q) >= 0; }); }).sort(byUpdated);
+        var box = h('div', { class: 'sitems' }, h('p', { class: 'shead static', text: 'найдено: ' + found.length }));
+        found.forEach(function (c) { box.append(srow(c, false)); });
+        body.append(box);
+      } else {
+        var pinned = S.chats.filter(function (c) { return c.pinned; }).sort(byUpdated);
+        if (pinned.length) add(section('pin', 'закреплённые', pinned.map(function (c) { return srow(c, true); })));
+        var projs = S.projects.slice().sort(function (a, b) { return b.created - a.created; }).map(function (p) {
+          var chats = S.chats.filter(function (c) { return c.project === p.id; }).sort(byUpdated);
+          var kids = h('div', { class: 'skids' }); kids.hidden = !S.open[p.id];
+          chats.forEach(function (c) { kids.append(srow(c, false)); });
+          kids.append(h('button', { class: 'snew', type: 'button', text: '+ чат в проекте', onclick: function () { newChat(p.id); closeSheet(); } }));
+          var ch = h('span', { class: 'ch' + (S.open[p.id] ? ' open' : '') }, icon('down'));
+          var main = h('button', { class: 'srow-main', type: 'button' }, icon('folder'), h('span', { text: p.name }), ch);
+          main.addEventListener('click', function () { S.open[p.id] = !S.open[p.id]; save(); kids.hidden = !S.open[p.id]; ch.classList.toggle('open', !!S.open[p.id]); });
+          var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'проект' }, icon('more'));
+          more.addEventListener('click', function (e) { e.stopPropagation(); projectForm(p); });
+          return h('div', { class: 'sproj' }, h('div', { class: 'srow' }, main, more), kids);
+        });
+        if (projs.length) add(section('proj', 'проекты', projs));
+        var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(byUpdated);
+        if (rest.length) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); })));
+        else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'пока нет чатов. напиши первый вопрос.' }));
+      }
+      var nm = (S.settings.name || '').trim();
+      foot.replaceChildren(
+        h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
+        h('span', { class: 'sname', text: nm || 'DDX AI' }),
+        (function () { var g = h('button', { class: 'srow-more on', type: 'button', 'aria-label': 'меню' }, icon('gear')); g.addEventListener('click', openMenu); return g; })());
+    };
+    input.addEventListener('input', fill);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; searchBox.hidden = true; fill(); } });
+    side.append(
+      h('div', { class: 'side-brand' }, logo('logo'), h('span', { text: 'DDX AI' })),
+      h('div', { class: 'snavs' },
+        nav('plus', 'новый чат', function () { newChat(null); closeSheet(); }),
+        nav('search', 'поиск', showSearch),
+        nav('folder', 'новый проект', function () { projectForm(null); }),
+        nav('user', 'персонализация', openPersonal)),
+      searchBox, body, foot);
+    sideUI = { input: input, fill: fill, show: showSearch };
   }
 
   function chatMenu(c) {
@@ -742,7 +814,7 @@
     var typing = /^(input|textarea)$/i.test((document.activeElement || {}).tagName || '');
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      if (wide() && sideUI) sideUI.input.focus(); else openChats();
+      if (wide() && sideUI) sideUI.show(); else openChats();
     } else if (e.key === '/' && !typing && sheet.hidden) { e.preventDefault(); ta.focus(); }
   });
   buildSide();
