@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.2.2';
+  var VERSION = 'v2.3';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -118,9 +118,9 @@
     try { d = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { d = null; }
     if (d && Array.isArray(d.chats)) {
       S.chats = d.chats.map(function (c) {
-        return { id: c.id || uid(), title: String(c.title || 'чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), msgs: cleanMsgs(c.msgs) };
+        return { id: c.id || uid(), title: String(c.title || 'чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), ord: typeof c.ord === 'number' ? c.ord : null, msgs: cleanMsgs(c.msgs) };
       });
-      S.projects = (Array.isArray(d.projects) ? d.projects : []).map(function (p) { return { id: p.id || uid(), name: String(p.name || 'проект'), instructions: String(p.instructions || ''), created: p.created || Date.now() }; });
+      S.projects = (Array.isArray(d.projects) ? d.projects : []).map(function (p) { return { id: p.id || uid(), name: String(p.name || 'проект'), instructions: String(p.instructions || ''), created: p.created || Date.now(), ord: typeof p.ord === 'number' ? p.ord : null }; });
       S.settings = Object.assign(S.settings, d.settings || {});
       S.cur = S.chats.some(function (c) { return c.id === d.cur; }) ? d.cur : null;
       S.open = d.open && typeof d.open === 'object' ? d.open : {};
@@ -143,7 +143,7 @@
     return JSON.stringify({
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
-        return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated,
+        return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
           msgs: c.msgs.slice(-80).map(function (m) { return { role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }) }; }) };
       })
     });
@@ -433,7 +433,7 @@
   function updateHeader() {
     var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
     $('#title').textContent = c ? c.title : 'DDX AI'; $('#title').classList.toggle('is-brand', !c);
-    var has = !!(c && c.msgs.length); $('#find').style.display = has ? '' : 'none'; $('#more').style.display = has ? '' : 'none';
+    var has = !!(c && c.msgs.length); $('#find').style.display = has ? '' : 'none'; $('#more').style.display = '';
     $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
     var capText = cap(pr
       ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
@@ -707,6 +707,8 @@
     document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
   })();
 
+  var ordCmp = function (fb) { return function (a, b) { var x = a.ord != null, y = b.ord != null; if (x && y) return a.ord - b.ord; if (x) return 1; if (y) return -1; return fb(a, b); }; };
+  var bySide = ordCmp(byUpdated), byProj = ordCmp(function (a, b) { return b.created - a.created; });
   function buildSide() {
     var side = $('#side');
     var input = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search' });
@@ -722,12 +724,12 @@
       more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
       var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title, raw: 1 }));
       main.addEventListener('click', function () { openChat(c.id); closeSheet(); setDrawer(false); });
-      return h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : '') }, main, more);
+      var rw = h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : ''), 'data-id': c.id }, main, more); return rw;
     };
     var section = function (key, label, items) {
       var off = !!S.open['s-' + key];
       var head = h('button', { class: 'shead', type: 'button' }, h('span', { text: label }), h('span', { class: 'ch' + (off ? '' : ' open') }, icon('down')));
-      var box = h('div', { class: 'sitems' }); box.hidden = off;
+      var box = h('div', { class: 'sitems', 'data-zone': key }); box.hidden = off;
       items.forEach(function (n) { box.append(n); });
       head.addEventListener('click', function () {
         S.open['s-' + key] = !S.open['s-' + key]; save();
@@ -745,11 +747,11 @@
         found.forEach(function (c) { box.append(srow(c, false)); });
         body.append(box);
       } else {
-        var pinned = S.chats.filter(function (c) { return c.pinned; }).sort(byUpdated);
+        var pinned = S.chats.filter(function (c) { return c.pinned; }).sort(bySide);
         if (pinned.length) add(section('pin', 'закреплённые', pinned.map(function (c) { return srow(c, true); })));
-        var projs = S.projects.slice().sort(function (a, b) { return b.created - a.created; }).map(function (p) {
-          var chats = S.chats.filter(function (c) { return c.project === p.id; }).sort(byUpdated);
-          var kids = h('div', { class: 'skids' }); kids.hidden = !S.open[p.id];
+        var projs = S.projects.slice().sort(byProj).map(function (p) {
+          var chats = S.chats.filter(function (c) { return c.project === p.id; }).sort(bySide);
+          var kids = h('div', { class: 'skids', 'data-zone': 'p:' + p.id }); kids.hidden = !S.open[p.id];
           chats.forEach(function (c) { kids.append(srow(c, false)); });
           kids.append(h('button', { class: 'snew', type: 'button', text: '+ чат в проекте', onclick: function () { newChat(p.id); closeSheet(); setDrawer(false); } }));
           var ch = h('span', { class: 'ch' + (S.open[p.id] ? ' open' : '') }, icon('down'));
@@ -757,11 +759,11 @@
           main.addEventListener('click', function () { S.open[p.id] = !S.open[p.id]; save(); kids.hidden = !S.open[p.id]; ch.classList.toggle('open', !!S.open[p.id]); });
           var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'проект' }, icon('more'));
           more.addEventListener('click', function (e) { e.stopPropagation(); projectForm(p); });
-          return h('div', { class: 'sproj' }, h('div', { class: 'srow' }, main, more), kids);
+          return h('div', { class: 'sproj', 'data-pid': p.id }, h('div', { class: 'srow', 'data-pid': p.id }, main, more), kids);
         });
         if (projs.length) add(section('proj', 'проекты', projs));
-        var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(byUpdated);
-        if (rest.length) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); })));
+        var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(bySide);
+        if (rest.length || (projs.length && S.chats.length)) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); })));
         else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'пока нет чатов. напиши первый вопрос.' }));
       }
       var nm = (S.settings.name || '').trim();
@@ -772,6 +774,86 @@
       foot.replaceChildren(prof,
         h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })));
     };
+    // перетаскивание мышью: чаты меняют порядок и переезжают между списками и проектами, проекты меняют порядок
+    (function () {
+      var drag = null, ghost = null, tgt = null, swallow = false;
+      var clear = function () { body.querySelectorAll('.drop-before, .drop-after, .drop-into, .drop-zone').forEach(function (n) { n.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-zone'); }); };
+      var chatOf = function (id) { return S.chats.filter(function (c) { return c.id === id; })[0]; };
+      var stop = function () {
+        clearTimeout(drag && drag.timer);
+        if (ghost) ghost.remove(); ghost = null; clear();
+        if (drag && drag.row) drag.row.classList.remove('dragging');
+        document.body.classList.remove('sdrag'); drag = null; tgt = null;
+      };
+      var start = function () {
+        drag.on = true; ghost = drag.row.cloneNode(true); ghost.classList.add('sghost'); ghost.style.width = drag.row.offsetWidth + 'px';
+        document.body.append(ghost); drag.row.classList.add('dragging'); document.body.classList.add('sdrag');
+        if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) { /* без вибрации */ } }
+      };
+      body.addEventListener('pointerdown', function (e) {
+        if (e.button > 0 || input.value.trim()) return;
+        var row = e.target.closest && e.target.closest('.srow[data-id], .srow[data-pid]');
+        if (!row || e.target.closest('.srow-more')) return;
+        drag = { row: row, x: e.clientX, y: e.clientY, on: false, touch: e.pointerType === 'touch', kind: row.getAttribute('data-id') ? 'chat' : 'proj', timer: 0 };
+        if (drag.touch) drag.timer = setTimeout(function () { if (drag && !drag.on) start(); }, 380);
+      });
+      window.addEventListener('pointermove', function (e) {
+        if (!drag) return;
+        if (!drag.on) {
+          var d = Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y);
+          if (drag.touch) { if (d > 9) stop(); } else if (d > 6) start();
+          if (!drag || !drag.on) return;
+        }
+        ghost.style.left = (e.clientX - 24) + 'px'; ghost.style.top = (e.clientY - 20) + 'px';
+        var br = body.getBoundingClientRect();
+        if (e.clientY < br.top + 44) body.scrollTop -= 9; else if (e.clientY > br.bottom - 44) body.scrollTop += 9;
+        clear(); tgt = null;
+        var el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return;
+        if (drag.kind === 'chat') {
+          var r = el.closest('.srow[data-id]');
+          if (r && r !== drag.row) { var rc = r.getBoundingClientRect(), bf = e.clientY < rc.top + rc.height / 2; r.classList.add(bf ? 'drop-before' : 'drop-after'); tgt = { t: 'row', row: r, before: bf }; return; }
+          var ph = el.closest('.srow[data-pid]');
+          if (ph) { ph.classList.add('drop-into'); tgt = { t: 'zone', zone: 'p:' + ph.getAttribute('data-pid') }; return; }
+          var z = el.closest('[data-zone]');
+          if (z) { z.classList.add('drop-zone'); tgt = { t: 'zone', zone: z.getAttribute('data-zone') }; }
+        } else {
+          var pr = el.closest('.sproj');
+          if (pr && pr !== drag.row.parentNode) { var pc = pr.firstChild.getBoundingClientRect(), pb = e.clientY < pc.top + pc.height / 2; pr.firstChild.classList.add(pb ? 'drop-before' : 'drop-after'); tgt = { t: 'proj', el: pr, before: pb }; }
+        }
+      });
+      var finish = function () {
+        if (!drag) return;
+        var on = drag.on, t = tgt, d = drag;
+        if (on) { swallow = true; setTimeout(function () { swallow = false; }, 60); }
+        stop();
+        if (!on || !t) return;
+        var changed = false;
+        if (d.kind === 'chat') {
+          var c = chatOf(d.row.getAttribute('data-id')); if (!c) return;
+          var zone = t.t === 'row' ? t.row.parentNode.getAttribute('data-zone') : t.zone;
+          if (!zone) return;
+          var ids = t.t === 'row' ? Array.prototype.map.call(t.row.parentNode.querySelectorAll('.srow[data-id]'), function (n) { return n.getAttribute('data-id'); }) : (function () { var zn = body.querySelector('[data-zone="' + zone + '"]'); return zn ? Array.prototype.map.call(zn.querySelectorAll('.srow[data-id]'), function (n) { return n.getAttribute('data-id'); }) : []; })();
+          ids = ids.filter(function (x) { return x !== c.id; });
+          if (zone === 'pin' && !c.pinned && S.chats.filter(function (x) { return x.pinned; }).length >= lim().pins) { limitToast('На тарифе ' + planWord() + ' можно закрепить до ' + lim().pins + ' чатов'); return; }
+          if (zone === 'pin') c.pinned = true;
+          else if (zone === 'rec') { c.pinned = false; c.project = null; }
+          else if (zone.indexOf('p:') === 0) { c.pinned = false; c.project = zone.slice(2); S.open[c.project] = true; }
+          var at = t.t === 'row' ? ids.indexOf(t.row.getAttribute('data-id')) + (t.before ? 0 : 1) : ids.length;
+          ids.splice(at, 0, c.id);
+          ids.forEach(function (id, i) { var x = chatOf(id); if (x) x.ord = i; });
+          changed = true;
+        } else if (t.t === 'proj') {
+          var pid = d.row.getAttribute('data-pid'), list = Array.prototype.map.call(body.querySelectorAll('.sproj'), function (n) { return n.getAttribute('data-pid'); }).filter(function (x) { return x !== pid; });
+          list.splice(list.indexOf(t.el.getAttribute('data-pid')) + (t.before ? 0 : 1), 0, pid);
+          list.forEach(function (id, i) { var p = projectById(id); if (p) p.ord = i; });
+          changed = true;
+        }
+        if (changed) { save(); fill(); }
+      };
+      window.addEventListener('pointerup', finish); window.addEventListener('pointercancel', stop);
+      document.addEventListener('click', function (e) { if (swallow) { e.stopPropagation(); e.preventDefault(); } }, true);
+      document.addEventListener('touchmove', function (e) { if (drag && drag.on && e.cancelable) e.preventDefault(); }, { passive: false });
+    })();
     input.addEventListener('input', fill);
     input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; searchBox.hidden = true; fill(); } });
     side.append(
@@ -1670,12 +1752,22 @@
     document.body.append(popEl);
   }
   function openPop() {
-    var c = curChat(); if (!c) return;
+    var c = curChat();
     if (popEl) { closePop(); return; }
     var item = function (label, ic, fn, cls) {
       var b = h('button', { class: 'pi' + (cls ? ' ' + cls : ''), type: 'button' }, icon(ic), h('span', { text: label }));
       b.addEventListener('click', function () { fn(b); }); return b;
     };
+    if (!c) {
+      popEl = h('div', { class: 'popmenu', role: 'menu' },
+        item('Новая сессия', 'edit', function () { closePop(); newChat(S.pendingProject); }),
+        item('Добавить в проект', 'folder', function () { closePop(); pickProjectForNew(); }),
+        item('Skills', 'bolt', function () { closePop(); openSkills(); }),
+        item('Настройки', 'gear', function () { closePop(); openMenu(); }));
+      var r0 = $('#more').getBoundingClientRect();
+      popEl.style.top = (r0.bottom + 8) + 'px'; popEl.style.right = Math.max(10, window.innerWidth - r0.right) + 'px';
+      document.body.append(popEl); $('#more').classList.add('on'); return;
+    }
     var pr = projectById(c.project), armed = false;
     popEl = h('div', { class: 'popmenu', role: 'menu' },
       item('Новая сессия', 'edit', function () { closePop(); newChat(c.project); }),

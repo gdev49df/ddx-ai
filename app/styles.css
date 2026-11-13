@@ -724,3 +724,16 @@ html[data-theme="light"] { --tk-c: #7a7f8a; --tk-s: #1d7a3a; --tk-n: #b45309; --
 .skillpop { z-index: 95; min-width: 0; padding: 4px; }
 .skillpop .pi { min-height: 46px; }
 .mem-x.armed { color: var(--err); background: rgb(255 138 128 / .14); }
+
+/* ===== перетаскивание в боковой панели ===== */
+.srow[data-id], .srow[data-pid] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media (hover: hover) { .srow[data-id], .srow[data-pid] { cursor: grab; } }
+.srow.dragging { opacity: .3; }
+.sghost { position: fixed; z-index: 300; pointer-events: none; display: flex; align-items: center; padding: 0 6px; min-height: 40px; border-radius: 12px; background: var(--card2); border: 1px solid var(--line-top); box-shadow: 0 14px 36px rgba(0, 0, 0, .45); transform: scale(1.03) rotate(.6deg); opacity: .97; }
+.sghost .srow-more { display: none; }
+body.sdrag, body.sdrag * { cursor: grabbing !important; }
+.srow.drop-before::before, .srow.drop-after::after { content: ""; position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 10px rgb(var(--w) / .5); z-index: 2; }
+.srow.drop-before::before { top: -1px; } .srow.drop-after::after { bottom: -1px; }
+.srow.drop-into { background: rgb(var(--w) / .14); outline: 1px dashed rgb(var(--w) / .45); }
+.drop-zone { background: rgb(var(--w) / .06); border-radius: 12px; }
+.sitems[data-zone], .skids[data-zone] { min-height: 8px; }
