@@ -611,12 +611,12 @@
   // шапка показывает название открытого чата и проект
   // приветствие на пустом чате: зависит от времени суток
   function pickGreeting() {
-    var hr = new Date().getHours(), nm = (S.settings.name || '').trim(), L;
-    if (hr < 5 || hr >= 23) L = ['привет, ночная сова', 'не спится? давай помозгуем', 'ночью думается лучше всего: что обсудим?', 'ночная сова на связи, помозгуем?'];
-    else if (hr < 11) L = ['доброе утро, соня', 'доброе утро! с чего начнём?', 'утро: самое время помозгуем', 'привет! кофе уже был? помозгуем?'];
-    else if (hr < 17) L = ['помозгуем?', 'добрый день! что разберём?', 'чем помочь сегодня?', 'привет! над чем думаем?'];
-    else L = ['добрый вечер! что обсудим?', 'вечер: помозгуем?', 'привет! как день прошёл?', 'чем займёмся вечером?'];
-    if (nm) L.push('привет, ' + nm + '! помозгуем?');
+    var hr = new Date().getHours(), nm = (S.settings.name || '').trim(), L, t;
+    if (hr < 5 || hr >= 23) { t = 'доброй ночи'; L = ['доброй ночи', 'привет, ночная сова', 'не спится?']; }
+    else if (hr < 11) { t = 'доброе утро'; L = ['доброе утро', 'с добрым утром', 'привет']; }
+    else if (hr < 17) { t = 'добрый день'; L = ['добрый день', 'привет', 'чем помочь?']; }
+    else { t = 'добрый вечер'; L = ['добрый вечер', 'привет', 'как прошёл день?']; }
+    if (nm) { L.push(t + ', ' + nm); L.push('привет, ' + nm); L.push(t + ', ' + nm); }
     return L[Math.floor(Math.random() * L.length)];
   }
   var greet = '';
@@ -626,12 +626,12 @@
     var has = !!(c && c.msgs.length); $('#more').style.display = '';
     $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
     var capText = cap(pr
-      ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
-      : (greet || (greet = pickGreeting())) + ' спроси что угодно или пришли фото.');
+      ? 'проект «' + pr.name + '»'
+      : (greet || (greet = pickGreeting())));
     var capEl = $('#hero-cap');
     if (capEl.getAttribute('data-t') !== capText) {
       capEl.setAttribute('data-t', capText); capEl.replaceChildren();
-      capText.split(' ').forEach(function (w, i) { capEl.append(h('span', { class: 'cw', style: 'animation-delay:' + (180 + i * 55) + 'ms', text: w, raw: 1 }), ' '); });
+      capText.split(' ').forEach(function (w, i) { capEl.append(h('span', { class: 'cw', style: 'animation-delay:' + (420 + i * 70) + 'ms', text: w, raw: 1 }), ' '); });
     }
   }
   function showHero() { hero.hidden = !!(curMsgs().length || thinkEl); }
@@ -2820,5 +2820,6 @@
 
   var splash = $('#splash');
   $('#splash-logo').append(logo('logo big'));
+  $('#hero-logo').append(logo('logo herologo'));
   setTimeout(function () { splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 900); }, 1000);
 })();

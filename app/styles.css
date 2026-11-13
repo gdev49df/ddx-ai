@@ -1101,3 +1101,21 @@ html[data-read="1"] .msg.ai pre, html[data-read="1"] .msg.ai code { font-family:
 /* список чатов в панели листается пальцем, не цепляет страницу; ошибка входа не двигает форму */
 .sbody { -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
 .sheet .auth-err { min-height: 20px; margin-top: 2px; }
+
+/* пустой чат: логотип по центру и приветствие под ним */
+.hero { display: grid; justify-items: center; align-content: center; gap: 22px; min-height: calc(100dvh - 330px); padding: 0 4px; text-align: center; }
+.hero[hidden] { display: none; }
+.hero-logo { display: grid; place-items: center; }
+svg.logo.herologo { width: 84px; height: 84px; color: var(--ink); opacity: .92; animation: logo-turn 28s linear infinite; }
+svg.logo.herologo polygon { animation: logo-in 1.3s cubic-bezier(.2, .7, .2, 1) both, logo-breathe 4.2s ease-in-out 1.5s infinite; }
+svg.logo.herologo polygon:nth-child(2) { animation-delay: .08s, 1.7s; }
+svg.logo.herologo polygon:nth-child(3) { animation-delay: .16s, 1.9s; }
+svg.logo.herologo polygon:nth-child(4) { animation-delay: .24s, 2.1s; }
+svg.logo.herologo polygon:nth-child(5) { animation-delay: .32s, 2.3s; }
+svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
+.hero-greet { margin: 0; max-width: 20ch; font-size: clamp(26px, 7.5vw, 34px); font-weight: 700; letter-spacing: -.025em; line-height: 1.15; color: var(--ink); }
+.hero-greet .cw { display: inline-block; }
+@media (min-width: 900px) { .hero { padding-top: 0; min-height: calc(100dvh - 360px); } }
+@media (prefers-reduced-motion: reduce) { svg.logo.herologo, svg.logo.herologo polygon { animation: none; } }
+.hero [hidden] { display: none !important; }
+.hero { padding-top: 64px; }
