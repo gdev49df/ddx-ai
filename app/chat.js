@@ -1526,7 +1526,7 @@
     var row = function (title, sub2, p, right, warn) {
       return h('div', { class: 'urow' }, h('div', { class: 'ul' }, h('b', { text: title }), sub2 ? h('span', { text: sub2 }) : null), bar(p, warn), h('em', { class: 'ur', text: right }));
     };
-    var lim2 = function (title, now, max) { var inf = big(max); return row(title, '', inf ? 0 : Math.round(now / max * 100), inf ? now + ' · без ограничений' : now + ' из ' + max, !inf && now >= max); };
+    var lim2 = function (title, now, max) { var inf = big(max); var p = inf ? 0 : Math.round(now / max * 100); return row(title, inf ? now + ' · без ограничений' : now + ' из ' + max, p, inf ? '∞' : p + '%', !inf && p >= 80); };
     var pinned = S.chats.filter(function (x) { return x.pinned; }).length;
     var up = h('button', { class: 'btn solid block', type: 'button', text: sub ? 'Сменить тариф' : 'Улучшить тариф' }); up.addEventListener('click', function () { openPlans(); });
     openSheet([
@@ -1534,7 +1534,7 @@
       h('h2', {}, h('span', { text: 'Твоё использование' }), h('span', { class: 'utag', text: planName })),
       h('p', { class: 'ustat', text: status }),
       h('div', { class: 'ugroup' },
-        row(sub ? 'Сообщения' : 'Сегодня', reset, pct, total ? 'Использовано ' + pct + '%' : '—', pct >= 80)),
+        row(sub ? 'Сообщения' : 'Сегодня', reset + (total ? ' · осталось ' + lastLeft.left + ' из ' + total : ''), pct, total ? pct + '%' : '—', pct >= 80)),
       h('p', { class: 'glabel', text: 'Лимиты тарифа' }),
       h('div', { class: 'ugroup' },
         lim2('Проекты', S.projects.length, L.projects),
