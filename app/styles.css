@@ -1274,3 +1274,10 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
   :root { --line: rgba(255, 255, 255, .22); --mute: #a8a8ae; }
   .composer .card, .sheet-panel, .md .blk, .chip { border-color: rgb(var(--w) / .4); }
 }
+
+/* стабильность на iPhone: меньше тяжёлых эффектов, ничего не пересчитывается при клавиатуре и шторках */
+.bar { -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-mask-image: none; mask-image: none; padding-bottom: 14px; background: linear-gradient(180deg, var(--bg) 88%, transparent); }
+.chip, .icon-btn, .sheet { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.dotfield i { box-shadow: none; will-change: opacity, transform; }
+body.typing .dotfield, body.lock .dotfield { display: none; }
+.dotfield { contain: strict; }

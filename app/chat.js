@@ -2927,13 +2927,11 @@
     if (window.visualViewport && typingNow && window.visualViewport.scale < 1.02) {
       var vp = window.visualViewport; v = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
     }
-    document.documentElement.style.setProperty('--kb', v + 'px');
+    if (kbSet.last !== v) { kbSet.last = v; document.documentElement.style.setProperty('--kb', v + 'px'); }
     if (!typingNow) document.body.classList.remove('typing');
   }
-  // после закрытия клавиатуры iOS иногда оставляет страницу сдвинутой вверх: возвращаем и пересчитываем несколько раз
-  function kbSettle() {
-    [0, 120, 350, 700].forEach(function (d) { setTimeout(function () { kbSet(); if (!document.body.classList.contains('typing') && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0); }, d); });
-  }
+  // после закрытия клавиатуры, возврата в приложение и поворота пересчитываем отступ; страницу не прокручиваем
+  function kbSettle() { [0, 150, 450].forEach(function (d) { setTimeout(kbSet, d); }); }
   if (window.visualViewport) {
     var vv = window.visualViewport, raf = 0;
     var kb = function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; kbSet(); }); };
@@ -2962,7 +2960,7 @@
 
   /* белые точки: мерцающий фон и круг от касания */
   (function () {
-    var layer = h('div', { class: 'dotfield', 'aria-hidden': 'true' }), n = 34;
+    var layer = h('div', { class: 'dotfield', 'aria-hidden': 'true' }), n = 22;
     for (var i = 0; i < n; i++) {
       var d = h('i'), sz = (1.5 + Math.random() * 2.5).toFixed(1);
       d.style.cssText = 'left:' + (Math.random() * 100).toFixed(1) + '%;top:' + (Math.random() * 100).toFixed(1) + '%;width:' + sz + 'px;height:' + sz + 'px;animation-delay:' + (-Math.random() * 9).toFixed(1) + 's;animation-duration:' + (5 + Math.random() * 6).toFixed(1) + 's';
