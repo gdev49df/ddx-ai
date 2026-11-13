@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.2.1';
+  var VERSION = 'v2.2.2';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -1013,7 +1013,7 @@
       big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
       big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins,
       'Память: до ' + L.memory + ' записей',
-      big(L.skills) ? 'Навыки без ограничений' : 'Навыки: до ' + L.skills
+      big(L.skills) ? 'Skills без ограничений' : 'Skills: до ' + L.skills
     ];
     return h('div', { class: 'feat' }, rows.map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
   }
@@ -1154,7 +1154,7 @@
       h('div', { class: 'group' },
         grow2('Персонализация', 'user', nm || '', openPersonal),
         grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
-        grow2('Навыки', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
+        grow2('Skills', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
         grow2('Тариф', 'star', planName, function () { openPlans(); }),
         grow2('Использование', 'gauge', usage, null)),
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
@@ -1234,10 +1234,10 @@
       return f.text().then(function (t) {
         var k = parseSkill(t, f.name), old = skillByCmd(k.cmd), arr = skillList();
         if (old) { k.id = old.id; arr[arr.indexOf(old)] = k; }
-        else { if (arr.length >= lim().skills) { limitToast('На тарифе ' + planWord() + ' до ' + lim().skills + ' навыков'); return; } arr.push(k); }
-        done++; last = '/' + k.cmd; if (k.cut) toast('навык длинный: взял первые ' + SK_MAX + ' символов');
+        else { if (arr.length >= lim().skills) { limitToast('На тарифе ' + planWord() + ' до ' + lim().skills + ' skills'); return; } arr.push(k); }
+        done++; last = '/' + k.cmd; if (k.cut) toast('skill длинный: взял первые ' + SK_MAX + ' символов');
       }, function () { /* прочитаем ниже */ }).then(null, function (e) { toast(e && e.message === 'cmd' ? 'в файле нет команды: первой строкой напиши /имя' : e && e.message === 'empty' ? 'в файле нет инструкции' : 'не получилось прочитать «' + f.name + '»'); });
-    })).then(function () { if (done) { save(); toast(done === 1 ? 'навык ' + last + ' добавлен' : 'навыков добавлено: ' + done); } if (sheet.classList.contains('show')) openSkills(); });
+    })).then(function () { if (done) { save(); toast(done === 1 ? 'skill ' + last + ' добавлен' : 'skills добавлено: ' + done); } if (sheet.classList.contains('show')) openSkills(); });
   }
   // навык сработает на то сообщение, где в любом месте написана его команда; на следующее уже нет
   function skillOf(c, text) {
@@ -1257,8 +1257,8 @@
   function showSkillbar() {
     var c = curChat(), id = c && (S.settings.stick || {})[c.id], k = id && skillList().filter(function (x) { return x.id === id; })[0], bar = $('#skillbar');
     if (!k) { bar.hidden = true; bar.replaceChildren(); measure(); return; }
-    var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'выключить навык' }, icon('close')); x.addEventListener('click', function () { setStick(c, null); toast('навык выключен'); });
-    bar.hidden = false; bar.replaceChildren(icon('bolt'), h('span', { text: 'навык /' + k.cmd, raw: 1 }), x); measure();
+    var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'выключить skill' }, icon('close')); x.addEventListener('click', function () { setStick(c, null); toast('навык выключен'); });
+    bar.hidden = false; bar.replaceChildren(icon('bolt'), h('span', { text: 'skill /' + k.cmd, raw: 1 }), x); measure();
   }
   var skillPop = null;
   function closeSkillPop() { if (skillPop) { skillPop.remove(); skillPop = null; } }
@@ -1280,11 +1280,11 @@
   document.addEventListener('pointerdown', function (e) { if (skillPop && !skillPop.contains(e.target) && e.target !== ta) closeSkillPop(); });
   function openSkills() {
     var arr = skillList(), box = h('div', { class: 'group' });
-    if (!arr.length) box.append(h('p', { class: 'cap pad', text: 'Пока нет навыков. Загрузи файл .txt или .md.' }));
+    if (!arr.length) box.append(h('p', { class: 'cap pad', text: 'Пока нет skills. Загрузи файл .txt или .md.' }));
     arr.forEach(function (k, i) {
       var use = h('button', { class: 'sk-use', type: 'button' }, h('span', { class: 'sk-t' }, h('b', { text: k.name === k.cmd ? '/' + k.cmd : k.name, raw: 1 }), h('em', { text: (k.name === k.cmd ? '' : '/' + k.cmd + ' · ') + k.desc, raw: 1 })));
       use.addEventListener('click', function () { closeSheet(); ta.value = '/' + k.cmd + ' '; grow(); syncSend(); storeDraft(); ta.focus(); });
-      var armed = false, del = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'удалить навык' }, icon('trash'));
+      var armed = false, del = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'удалить skill' }, icon('trash'));
       del.addEventListener('click', function () {
         if (!armed) { armed = true; del.classList.add('armed'); setTimeout(function () { armed = false; del.classList.remove('armed'); }, 2500); return; }
         arr.splice(i, 1); save(); showSkillbar(); openSkills();
@@ -1295,11 +1295,11 @@
     add.addEventListener('click', function () { $('#skillfile').click(); });
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
-      h('h2', { text: 'Навыки' }),
-      h('p', { class: 'cap', text: 'Навык это готовая инструкция. Загрузи файл .txt или .md: первой строкой команда, дальше текст инструкции. ' }),
+      h('h2', { text: 'Skills' }),
+      h('p', { class: 'cap', text: 'Skill это готовая инструкция. Загрузи файл .txt или .md: первой строкой команда, дальше текст инструкции. ' }),
       h('pre', { class: 'sk-ex' }, h('code', { text: '/short-text\nОтвечай коротко: не больше трёх предложений, без вступлений.' })),
-      h('p', { class: 'cap', text: 'Напиши команду в любом месте сообщения, например «расскажи про луну /short-text»: навык сработает на это сообщение. В следующем, без команды, его уже не будет.' }),
-      h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Мои навыки' }), h('span', { class: 'fcnt', text: arr.length + (lim().skills < 1e9 ? ' из ' + lim().skills : '') })),
+      h('p', { class: 'cap', text: 'Напиши команду в любом месте сообщения, например «расскажи про луну /short-text»: skill сработает на это сообщение. В следующем, без команды, его уже не будет.' }),
+      h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Мои skills' }), h('span', { class: 'fcnt', text: arr.length + (lim().skills < 1e9 ? ' из ' + lim().skills : '') })),
       box, add
     ], true);
   }
@@ -1330,7 +1330,7 @@
       item('Фото', 'image', function () { $('#file').click(); }),
       item('Файлы', 'file', function () { $('#docfile').click(); }),
       item('Добавить в проект', 'folder', pickProjectForNew),
-      item('Навыки', 'bolt', openSkills),
+      item('Skills', 'bolt', openSkills),
       item('Память', 'brain', openMemory));
     var r = $('#pick').getBoundingClientRect();
     plusPop.style.left = Math.max(10, r.left) + 'px'; plusPop.style.bottom = (window.innerHeight - r.top + 10) + 'px';
@@ -1545,7 +1545,7 @@
     var act = lastU ? skillOf(null, lastU.text) : null;
     if (act && out.length) {
       var at = out.length - 1;
-      out.splice(at, 0, { role: 'user', content: 'Навык «' + act.skill.name + '». Следуй этим инструкциям в ответе на моё следующее сообщение:\n' + act.skill.text.slice(0, SK_MAX) });
+      out.splice(at, 0, { role: 'user', content: 'Skill «' + act.skill.name + '». Следуй этим инструкциям в ответе на моё следующее сообщение:\n' + act.skill.text.slice(0, SK_MAX) });
       if (outImg >= at) outImg++;
     }
     return { list: out, imgAt: outImg, images: imgAt >= 0 ? recent[imgAt].full : [] };
@@ -1661,7 +1661,7 @@
       top, up, h('i', { class: 'psep' }),
       item('Персонализация', 'user', openPersonal),
       item('Память', 'brain', openMemory, memN ? String(memN) : ''),
-      item('Навыки', 'bolt', openSkills, skillList().length ? String(skillList().length) : ''),
+      item('Skills', 'bolt', openSkills, skillList().length ? String(skillList().length) : ''),
       item('Тарифы', 'star', function () { openPlans(); }, planName),
       h('i', { class: 'psep' }),
       item('Настройки', 'gear', openMenu));
