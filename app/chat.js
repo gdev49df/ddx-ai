@@ -601,15 +601,24 @@
 
   function hm(ts) { return new Date(ts).toLocaleTimeString(window.I18N ? I18N.locale() : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); }
   // окно в 12 часов закончилось: лимит снова полный
-  function refreshLeft() { if (lastLeft && lastLeft.reset && Date.now() > lastLeft.reset && lastLeft.limit) { lastLeft.left = lastLeft.limit; lastLeft.reset = 0; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); } }
-  function setLeft(j, plan) { lastLeft = { day: dayStr(), left: j.left, limit: j.limit || (lastLeft ? lastLeft.limit : 0) || 0, plan: plan || j.plan || 'free', reset: j.reset || 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); }
+  function refreshLeft() {
+    if (!lastLeft || !lastLeft.limit) return;
+    var now = Date.now();
+    if (lastLeft.full && now > lastLeft.full) { lastLeft.left = lastLeft.limit; lastLeft.reset = lastLeft.full = 0; }
+    else if (lastLeft.left <= 0 && lastLeft.reset && now > lastLeft.reset) { lastLeft.left = 1; lastLeft.reset = 0; }
+    else return;
+    ls.set(KEY_LEFT, JSON.stringify(lastLeft));
+  }
+  // когда показывать «восстановится в»: при нуле — ближайший слот, иначе полное восстановление
+  function backAt() { return !lastLeft ? 0 : (lastLeft.left <= 0 ? lastLeft.reset : lastLeft.full) || 0; }
+  function setLeft(j, plan) { lastLeft = { day: dayStr(), left: j.left, limit: j.limit || (lastLeft ? lastLeft.limit : 0) || 0, plan: plan || j.plan || 'free', reset: j.reset || 0, full: j.full || 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); }
   function showLeft() {
     refreshLeft();
     var el = $('#left');
     if (!lastLeft) { el.hidden = true; return; }
     el.hidden = false;
     var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
-    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений до сброса: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (lastLeft.reset ? ' · сброс в ' + hm(lastLeft.reset) : '');
+    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений в окне 12 часов: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (backAt() ? ' · восстановится в ' + hm(backAt()) : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
   }
 
@@ -1709,7 +1718,7 @@
     if (total) used = Math.max(0, Math.min(total, total - lastLeft.left));
     var pct = total ? Math.round(used / total * 100) : 0;
     refreshLeft(); total = lastLeft && lastLeft.limit ? lastLeft.limit : 0; used = total ? Math.max(0, Math.min(total, total - lastLeft.left)) : null; pct = total ? Math.round(used / total * 100) : 0;
-    var reset = lastLeft && lastLeft.reset ? 'Сброс в ' + hm(lastLeft.reset) : 'Сброс каждые 12 часов: в 00:00 и в 12:00';
+    var reset = backAt() ? 'Восстановится в ' + hm(backAt()) : 'Скользящее окно: сообщение освобождается через 12 часов';
     var status = !total ? 'Данные появятся после первого сообщения.' : pct >= 100 ? 'Лимит исчерпан. Он обновится после сброса, или можно перейти на тариф выше.' : pct >= 80 ? 'Лимит почти исчерпан. Запаса хватит ненадолго.' : 'Всё идёт по плану. К сбросу у тебя ещё должен остаться запас.';
     var bar = function (p, warn) { return h('div', { class: 'ubar' + (warn ? ' warn' : '') }, h('i', { style: 'width:' + Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%' })); };
     var row = function (title, sub2, p, right, warn) {
@@ -2324,7 +2333,7 @@
       var j = x.j || {}, msg;
       var plans = false;
       if (x.st === 429) {
-        setLeft({ left: 0, reset: j.reset }, j.plan); showLeft(); var until = j.reset ? ' (сброс в ' + hm(j.reset) + ')' : '';
+        setLeft({ left: 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
         msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
