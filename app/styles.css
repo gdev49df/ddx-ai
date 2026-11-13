@@ -1161,3 +1161,56 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 @keyframes ripdot { to { transform: scale(7); opacity: 0; } }
 #view { position: relative; z-index: 1; }
 @media (prefers-reduced-motion: reduce) { .dotfield i, .tdots i, .ripdot { animation: none; } .dotfield { display: none; } }
+
+/* ===== обновлённый вид v2: стекло, мягкие формы, светлые акценты. палитра и шрифт прежние ===== */
+.bar { background: linear-gradient(180deg, rgb(var(--w) / 0), transparent), color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); border-bottom: 1px solid rgb(var(--w) / .05); }
+.bar h1 { font-size: 22px; font-weight: 750; letter-spacing: -.03em; }
+.bar .label { font-size: 11px; letter-spacing: .14em; opacity: .8; }
+.icon-btn { border-radius: 50%; background: rgb(var(--w) / .05); border-color: rgb(var(--w) / .09); border-top-color: rgb(var(--w) / .16); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: transform .45s var(--spring), background .3s, border-color .3s; }
+.icon-btn:hover { background: rgb(var(--w) / .09); }
+
+/* сообщения */
+.msg.me:not(.editing) { background: var(--paper); border: 0; border-radius: 22px 22px 6px 22px; box-shadow: 0 8px 24px rgb(0 0 0 / .28), inset 0 1px 0 rgb(255 255 255 / .5); }
+.msg.me:not(.editing) p { color: var(--on-paper); font-weight: 500; }
+.msg.me:not(.editing) .medit { color: var(--on-paper); opacity: .55; }
+.msg.ai { padding: 2px 6px; line-height: 1.6; }
+.msg.ai .md p { line-height: 1.62; }
+.msg.ai .md h1, .msg.ai .md h2, .msg.ai .md h3 { letter-spacing: -.02em; }
+.msg.ai .md code:not(pre code) { background: rgb(var(--w) / .08); border: 1px solid rgb(var(--w) / .08); border-radius: 7px; padding: 1px 6px; }
+.md .blk { border-radius: 16px; border: 1px solid rgb(var(--w) / .09); background: linear-gradient(180deg, rgb(var(--w) / .035), transparent 40%), var(--bg2); box-shadow: 0 6px 22px rgb(0 0 0 / .22); overflow: hidden; }
+.msg.err { border-radius: 18px; background: rgb(255 138 128 / .06); border-color: rgb(255 138 128 / .22); }
+.msg-actions .ab { border-radius: 50%; }
+
+/* поле ввода */
+.composer { width: min(calc(100% - 20px), 560px); }
+.composer .card { border-radius: 28px; background: color-mix(in srgb, var(--card2) 78%, transparent); -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3);
+  border: 1px solid rgb(var(--w) / .11); border-top-color: rgb(var(--w) / .2); box-shadow: 0 18px 50px rgb(0 0 0 / .42), 0 0 0 0 rgb(var(--w) / 0); transition: box-shadow .45s var(--ease), border-color .45s; }
+.composer .card:focus-within { border-color: rgb(var(--w) / .3); box-shadow: 0 18px 50px rgb(0 0 0 / .42), 0 0 0 4px rgb(var(--w) / .06), 0 0 38px rgb(var(--w) / .1); }
+.cap-in .ib { border-radius: 50%; }
+.cap-in .ib.go { background: var(--paper); box-shadow: 0 4px 16px rgb(var(--w) / .22); transition: transform .45s var(--spring), opacity .3s, box-shadow .3s; }
+.cap-in .ib.go:not(:disabled):active { transform: scale(.88); }
+.cap-in .ib.go:disabled { box-shadow: none; }
+
+/* чипы, подсказки, быстрые действия */
+.chip { border-radius: 99px; background: rgb(var(--w) / .04); border-color: rgb(var(--w) / .1); color: var(--silver); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: transform .4s var(--spring), background .3s, color .3s, border-color .3s; }
+.chip:hover { background: rgb(var(--w) / .09); border-color: rgb(var(--w) / .22); color: var(--ink); }
+.sugg .chip { border-radius: 99px; }
+.tchip { background: rgb(var(--w) / .03); }
+
+/* карточки, шторки, меню */
+.card { border-radius: 22px; }
+.sheet { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.sheet-panel { border-radius: 30px 30px 0 0; background: linear-gradient(180deg, rgb(var(--w) / .06), rgb(var(--w) / 0) 38%), color-mix(in srgb, var(--card) 92%, transparent); box-shadow: 0 -20px 60px rgb(0 0 0 / .4); }
+.sheet-panel::before { width: 42px; height: 5px; background: rgb(var(--w) / .22); }
+.sheet h2 { font-size: 24px; letter-spacing: -.04em; }
+.modelpop { border-radius: 20px; -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: 0 20px 60px rgb(0 0 0 / .5); }
+
+/* боковая панель */
+.side { background: linear-gradient(180deg, rgb(var(--w) / .035), transparent 30%), color-mix(in srgb, var(--bg) 94%, transparent); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border-right-color: rgb(var(--w) / .08); }
+.srow, .snav { border-radius: 14px; transition: background .25s, transform .35s var(--spring); }
+.srow:hover, .snav:hover { background: rgb(var(--w) / .06); }
+.srow:active, .snav:active { transform: scale(.98); }
+
+/* прокрутка и выделение */
+::selection { background: rgb(var(--w) / .22); }
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--w) / .16) transparent; }
