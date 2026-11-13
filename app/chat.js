@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.2';
+  var VERSION = 'v2.2.1';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -1239,12 +1239,15 @@
       }, function () { /* прочитаем ниже */ }).then(null, function (e) { toast(e && e.message === 'cmd' ? 'в файле нет команды: первой строкой напиши /имя' : e && e.message === 'empty' ? 'в файле нет инструкции' : 'не получилось прочитать «' + f.name + '»'); });
     })).then(function () { if (done) { save(); toast(done === 1 ? 'навык ' + last + ' добавлен' : 'навыков добавлено: ' + done); } if (sheet.classList.contains('show')) openSkills(); });
   }
-  // нужный навык для сообщения: команда в начале текста, иначе включённый на весь чат
+  // навык сработает на то сообщение, где в любом месте написана его команда; на следующее уже нет
   function skillOf(c, text) {
-    var m = /^\s*\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(text || '');
-    if (m) { var k = skillByCmd(m[1]); if (k) return { skill: k, rest: (m[2] || '').trim(), inline: true }; }
-    var id = (S.settings.stick || {})[c && c.id], st = id && skillList().filter(function (x) { return x.id === id; })[0];
-    return st ? { skill: st, rest: String(text || ''), inline: false } : null;
+    var rx = /(^|\s)\/([^\s\/]+)(?=\s|$)/g, m;
+    text = String(text || '');
+    while ((m = rx.exec(text))) {
+      var k = skillByCmd(m[2]);
+      if (k) return { skill: k, rest: (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim(), inline: true };
+    }
+    return null;
   }
   function setStick(c, k) {
     var st = S.settings.stick || (S.settings.stick = {});
@@ -1260,15 +1263,14 @@
   var skillPop = null;
   function closeSkillPop() { if (skillPop) { skillPop.remove(); skillPop = null; } }
   function skillHint() {
-    var m = /^\/([^\s]*)$/.exec(ta.value), c = curChat();
+    var m = /(^|\s)\/([^\s\/]*)$/.exec(ta.value);
     if (!m) { closeSkillPop(); return; }
-    var q = m[1].toLowerCase(), items = skillList().filter(function (k) { return k.cmd.indexOf(q) === 0; }).map(function (k) { return [k.cmd, k.desc]; });
-    if (c && (S.settings.stick || {})[c.id] && 'off'.indexOf(q) === 0) items.push(['off', 'выключить навык']);
+    var q = m[2].toLowerCase(), items = skillList().filter(function (k) { return k.cmd.indexOf(q) === 0; }).map(function (k) { return [k.cmd, k.desc]; });
     if (!items.length) { closeSkillPop(); return; }
     closeSkillPop();
     skillPop = h('div', { class: 'popmenu up skillpop', role: 'menu' }, items.slice(0, 5).map(function (it) {
       var b = h('button', { class: 'pi', type: 'button' }, icon('bolt'), h('span', { class: 'sk-t' }, h('b', { text: '/' + it[0], raw: 1 }), h('em', { text: it[1], raw: 1 })));
-      b.addEventListener('pointerdown', function (e) { e.preventDefault(); ta.value = '/' + it[0] + (it[0] === 'off' ? '' : ' '); closeSkillPop(); grow(); syncSend(); storeDraft(); ta.focus(); });
+      b.addEventListener('pointerdown', function (e) { e.preventDefault(); ta.value = ta.value.slice(0, m.index + m[1].length) + '/' + it[0] + ' '; closeSkillPop(); grow(); syncSend(); storeDraft(); ta.focus(); });
       return b;
     }));
     var r = $('#composer').getBoundingClientRect();
@@ -1294,9 +1296,9 @@
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
       h('h2', { text: 'Навыки' }),
-      h('p', { class: 'cap', text: 'Навык это готовая инструкция. Загрузи файл .txt или .md: первой строкой команда, дальше текст инструкции. Напиши команду в чате, и она сработает.' }),
+      h('p', { class: 'cap', text: 'Навык это готовая инструкция. Загрузи файл .txt или .md: первой строкой команда, дальше текст инструкции. ' }),
       h('pre', { class: 'sk-ex' }, h('code', { text: '/short-text\nОтвечай коротко: не больше трёх предложений, без вступлений.' })),
-      h('p', { class: 'cap', text: '«/short-text вопрос» применит навык к одному сообщению, а просто «/short-text» включит его на весь чат. «/off» выключит.' }),
+      h('p', { class: 'cap', text: 'Напиши команду в любом месте сообщения, например «расскажи про луну /short-text»: навык сработает на это сообщение. В следующем, без команды, его уже не будет.' }),
       h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Мои навыки' }), h('span', { class: 'fcnt', text: arr.length + (lim().skills < 1e9 ? ' из ' + lim().skills : '') })),
       box, add
     ], true);
@@ -1497,16 +1499,6 @@
     clearError();
     var mm = /^\s*запомни(?:те)?[,:]?\s+(?:что\s+)?([\s\S]{3,200})$/i.exec(text);
     if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
-    var sk0 = /^\s*\/([^\s]+)\s*$/.exec(text);
-    if (sk0 && !atts.length) {
-      var kk = skillByCmd(sk0[1]), cc = curChat();
-      if (kk || sk0[1].toLowerCase() === 'off') {
-        cc = ensureChat();
-        if (kk) { setStick(cc, kk); toast('навык /' + kk.cmd + ' включён на весь чат'); } else { setStick(cc, null); toast('навык выключен'); }
-        delete drafts[draftKey]; ta.value = ''; draftKey = dKey(); storeDraft(); closeSkillPop(); grow(); syncSend(); save(); renderAll();
-        return;
-      }
-    }
     var c = ensureChat(), first = !c.msgs.length;
     var pics = atts.filter(function (a) { return !a.kind; }), docs = atts.filter(function (a) { return a.kind === 'file'; });
     var m = { id: uid(), role: 'user', text: text, thumbs: pics.map(function (a) { return a.thumb; }), full: pics.map(function (a) { return a.full; }), files: docs.map(function (a) { return { name: a.name, text: a.text }; }) };
@@ -1550,10 +1542,10 @@
       out.push(o);
     });
     var lastU = null; for (var q = c.msgs.length - 1; q >= 0; q--) { if (c.msgs[q].role === 'user') { lastU = c.msgs[q]; break; } }
-    var act = lastU ? (skillOf(null, lastU.text) || skillOf(c, '')) : null;
+    var act = lastU ? skillOf(null, lastU.text) : null;
     if (act && out.length) {
       var at = out.length - 1;
-      out.splice(at, 0, { role: 'user', content: 'Навык «' + act.skill.name + '». Следуй этим инструкциям в ответе на моё следующее сообщение' + (act.inline ? '' : ' и на все следующие') + ':\n' + act.skill.text.slice(0, SK_MAX) });
+      out.splice(at, 0, { role: 'user', content: 'Навык «' + act.skill.name + '». Следуй этим инструкциям в ответе на моё следующее сообщение:\n' + act.skill.text.slice(0, SK_MAX) });
       if (outImg >= at) outImg++;
     }
     return { list: out, imgAt: outImg, images: imgAt >= 0 ? recent[imgAt].full : [] };
