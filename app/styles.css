@@ -1120,3 +1120,7 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
   .pvchat:active, .pvnew:active { background: var(--line); }
   .pvnew { color: var(--mute); }
 }
+/* строка ввода на телефоне: верхние углы менее круглые, нижние как были */
+@media (max-width: 899px) {
+  .composer .card { border-top-left-radius: 16px; border-top-right-radius: 16px; }
+}
