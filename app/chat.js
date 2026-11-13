@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.7';
+  var VERSION = 'v2.8';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -364,6 +364,91 @@
 
   /* ---------- отрисовка ---------- */
   var chat = $('#chat'), hero = $('#hero'), ta = $('#t'), sendBtn = $('#send');
+
+  /* ---------- аватар, zip-экспорт, языки ---------- */
+  function avEl(cls) {
+    var a = S.settings.avatar, nm = (S.settings.fullName || S.settings.name || (acct && acct.user && acct.user.login) || '').trim();
+    var s = h('span', { class: 'sava' + (cls ? ' ' + cls : '') });
+    if (a) { s.classList.add('img'); s.style.backgroundImage = 'url(' + a + ')'; } else s.textContent = (nm || 'D').charAt(0).toUpperCase();
+    return s;
+  }
+  function pickAvatar(done) {
+    var inp = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true });
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0]; inp.remove(); if (!f) return;
+      if (f.size > 10 * 1048576) { toast('Файл больше 10 МБ'); return; }
+      var img = new Image(), url = URL.createObjectURL(f);
+      img.onload = function () {
+        var n = 192, cv = document.createElement('canvas'), s = Math.min(img.width, img.height), cx = cv.getContext('2d');
+        cv.width = cv.height = n; cx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, n, n);
+        URL.revokeObjectURL(url); S.settings.avatar = cv.toDataURL('image/jpeg', .85); save(); refreshSide(); if (done) done(); toast('Фото обновлено');
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); toast('Не удалось открыть фото'); };
+      img.src = url;
+    });
+    document.body.append(inp); inp.click();
+  }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], cen = [], off = 0, T = [], n, k, cc;
+    for (n = 0; n < 256; n++) { cc = n; for (k = 0; k < 8; k++) cc = cc & 1 ? 0xEDB88320 ^ (cc >>> 1) : cc >>> 1; T[n] = cc >>> 0; }
+    var crc = function (b) { var x = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) x = T[(x ^ b[i]) & 255] ^ (x >>> 8); return (x ^ 0xFFFFFFFF) >>> 0; };
+    files.forEach(function (f) {
+      var nm = enc.encode(f.name), d = enc.encode(f.text), cr = crc(d);
+      var lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, cr, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, nm.length, true);
+      parts.push(new Uint8Array(lh.buffer), nm, d);
+      var ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, cr, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+      cen.push(new Uint8Array(ch.buffer), nm); off += 30 + nm.length + d.length;
+    });
+    var csz = cen.reduce(function (a, b) { return a + b.length; }, 0), end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, csz, true); end.setUint32(16, off, true);
+    return new Blob(parts.concat(cen, [new Uint8Array(end.buffer)]), { type: 'application/zip' });
+  }
+  function saveBlob(name, blob) {
+    try {
+      var file = new File([blob], name, { type: blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
+    } catch (e0) { /* без File */ }
+    var url = URL.createObjectURL(blob), a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('Файл «' + name + '» сохранён');
+  }
+  function exportMemory() {
+    var st = S.settings, mem = st.memory || [], prof = [];
+    prof.push('# Профиль', '');
+    if (st.fullName) prof.push('- Полное имя: ' + st.fullName);
+    if (st.name) prof.push('- Как обращаться: ' + st.name);
+    if (st.role) prof.push('- Чем занимается: ' + st.role);
+    if (st.about) prof.push('- О себе: ' + st.about);
+    if (st.extra) prof.push('', '## Свои правила', '', st.extra);
+    var facts = ['# Память', ''].concat(mem.length ? mem.map(function (t) { return '- ' + t; }) : ['Пока пусто.']);
+    saveBlob('ddx-ai-memory.zip', zipStore([{ name: 'profile.md', text: prof.join('\n') + '\n' }, { name: 'memory.md', text: facts.join('\n') + '\n' }]));
+  }
+  var LANGS = [['ru', 'Русский', 'Russian'], ['kk', 'Қазақша', 'Kazakh'], ['en', 'English', 'English'], ['uk', 'Українська', 'Ukrainian'], ['be', 'Беларуская', 'Belarusian'], ['uz', 'Oʻzbekcha', 'Uzbek'],
+    ['ky', 'Кыргызча', 'Kyrgyz'], ['tg', 'Тоҷикӣ', 'Tajik'], ['az', 'Azərbaycanca', 'Azerbaijani'], ['ka', 'ქართული', 'Georgian'], ['hy', 'Հայերեն', 'Armenian'], ['tr', 'Türkçe', 'Turkish'],
+    ['de', 'Deutsch', 'German'], ['fr', 'Français', 'French'], ['es', 'Español', 'Spanish'], ['it', 'Italiano', 'Italian'], ['pt', 'Português', 'Portuguese'], ['pl', 'Polski', 'Polish'],
+    ['nl', 'Nederlands', 'Dutch'], ['cs', 'Čeština', 'Czech'], ['ro', 'Română', 'Romanian'], ['hu', 'Magyar', 'Hungarian'], ['bg', 'Български', 'Bulgarian'], ['sr', 'Српски', 'Serbian'],
+    ['el', 'Ελληνικά', 'Greek'], ['sv', 'Svenska', 'Swedish'], ['da', 'Dansk', 'Danish'], ['fi', 'Suomi', 'Finnish'], ['no', 'Norsk', 'Norwegian'], ['he', 'עברית', 'Hebrew'],
+    ['ar', 'العربية', 'Arabic'], ['fa', 'فارسی', 'Persian'], ['hi', 'हिन्दी', 'Hindi'], ['bn', 'বাংলা', 'Bangla'], ['ur', 'اردو', 'Urdu'], ['th', 'ไทย', 'Thai'],
+    ['vi', 'Tiếng Việt', 'Vietnamese'], ['id', 'Indonesia', 'Indonesian'], ['ms', 'Melayu', 'Malay'], ['fil', 'Filipino', 'Filipino'], ['zh-CN', '中文（简体）', 'Chinese (Simplified)'],
+    ['zh-TW', '中文（繁體）', 'Chinese (Traditional)'], ['ja', '日本語', 'Japanese'], ['ko', '한국어', 'Korean'], ['mn', 'Монгол', 'Mongolian']];
+  function langOf(code) { return LANGS.filter(function (l) { return l[0] === code; })[0] || null; }
+  function openLangPicker(back) {
+    var q = field('input', { type: 'search', placeholder: 'Поиск языков', 'aria-label': 'поиск языков' }), grid = h('div', { class: 'langs' });
+    var cur = S.settings.lang || 'auto';
+    var fill = function () {
+      var s = q.value.trim().toLowerCase(); grid.replaceChildren();
+      [['auto', 'Как в сообщении', 'Автоматически']].concat(LANGS).filter(function (l) { return !s || (l[1] + ' ' + l[2]).toLowerCase().indexOf(s) >= 0; }).forEach(function (l) {
+        var b = h('button', { type: 'button', class: 'lang' + (l[0] === cur ? ' on' : '') }, h('b', { text: l[1], raw: 1 }), h('span', { text: l[2], raw: 1 }));
+        b.addEventListener('click', function () { S.settings.lang = l[0]; save(); toast('Язык ответов: ' + l[1]); back(); });
+        grid.append(b);
+      });
+      if (!grid.children.length) grid.append(h('p', { class: 'cap', text: 'Ничего не найдено' }));
+    };
+    q.addEventListener('input', fill); fill();
+    openSheet([backLink(back), h('h2', { text: 'Выберите язык' }), h('div', { class: 'sw-find big' }, icon('search'), q), grid], true);
+    if (!wide()) setTimeout(function () { q.focus(); }, 350);
+  }
 
   /* ---------- предпросмотр файла (справа, пол-окна) ---------- */
   var pvEl = null;
@@ -880,7 +965,7 @@
       }
       var nm = (S.settings.name || '').trim();
       var prof = h('button', { class: 'sprof', type: 'button', 'aria-label': 'профиль' },
-        h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
+        avEl(),
         h('span', { class: 'sid' }, h('b', { text: (acct && acct.user && (nm || acct.user.login)) || nm || 'DDX AI', raw: 1 }), h('em', { text: (sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free') + (acct ? ' · аккаунт' : ''), raw: 1 })),
         h('span', { class: 'schev' }, icon('down')));
       prof.addEventListener('click', function (e) { e.stopPropagation(); openProfile(); });
@@ -1161,6 +1246,21 @@
       reset
     ], true);
   }
+  // поиск по прошлым чатам: берём пару чатов, где встречаются слова из последнего вопроса
+  function pastChatsNote(c) {
+    var last = null; (c.msgs || []).forEach(function (m) { if (m.role === 'user') last = m; });
+    var words = ((last && last.text || '').toLowerCase().match(/[\p{L}\d]{5,}/gu) || []).slice(0, 8);
+    if (!words.length) return '';
+    var hits = [];
+    S.chats.forEach(function (o) {
+      if (o.id === c.id) return;
+      var best = null, score = 0;
+      o.msgs.slice(-12).forEach(function (m) { var t = (m.text || '').toLowerCase(), s = 0; words.forEach(function (w) { if (t.indexOf(w.slice(0, -1)) >= 0) s++; }); if (s > score) { score = s; best = m; } });
+      if (score) hits.push({ s: score, t: o.title, x: String(best.text).replace(/\s+/g, ' ').slice(0, 110) });
+    });
+    hits.sort(function (a, b) { return b.s - a.s; });
+    return hits.length ? 'Из прошлых чатов пользователя (используй, только если уместно): ' + hits.slice(0, 3).map(function (x) { return '«' + x.t + '»: ' + x.x; }).join(' | ').slice(0, 420) : '';
+  }
   function buildInstructions(c, extra) {
     var st = S.settings, out = [];
     if (st.name) out.push('Пользователя зовут ' + st.name + '.');
@@ -1171,6 +1271,8 @@
       g[2].forEach(function (o) { if (o[0] === v && o[2]) out.push(o[2]); });
     });
     if (st.extra) out.push('Пожелания пользователя к ответам: ' + st.extra);
+    if (st.lang && st.lang !== 'auto' && langOf(st.lang)) out.push('Всегда отвечай на языке: ' + langOf(st.lang)[2] + '.');
+    if (st.chatSearch && c) { var pc = pastChatsNote(c); if (pc) out.push(pc); }
     if (st.memOn !== false && st.memory && st.memory.length) out.push('Память о пользователе (учитывай, но не упоминай без повода): ' + st.memory.join('; ').slice(0, 700));
     var pr = projectById(c ? c.project : null);
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
@@ -1482,31 +1584,93 @@
     openSheet([h('h2', { text: 'Изменить пароль' }), h('div', { class: 'group solo stack' }, old, nw, nw2), err, ok]);
   }
 
+  var JOBS = ['Студент', 'Юрист', 'Разработчик', 'Дизайнер', 'Предприниматель', 'Учитель', 'Маркетолог', 'Менеджер', 'Бухгалтер', 'Инженер', 'Врач', 'Писатель', 'Исследователь', 'Другое'];
+  function dateRu(t) { return new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(' г.,', ' г.,'); }
+  function openDelete() {
+    var pw = field('input', { type: 'password', placeholder: 'Пароль', 'aria-label': 'пароль', autocomplete: 'current-password' });
+    var err = h('p', { class: 'cap err', text: '' });
+    var ok = h('button', { class: 'btn block danger', type: 'button', text: 'Удалить аккаунт навсегда' });
+    ok.addEventListener('click', function () {
+      if (!pw.value) { err.textContent = 'Введи пароль'; return; }
+      ok.disabled = true;
+      api('/auth/delete', { password: pw.value }).then(function (x) {
+        ok.disabled = false;
+        if (x.ok) { dropAcct('Аккаунт удалён'); closeSheet(); return; }
+        err.textContent = x.st === 401 ? 'Пароль неверный' : (x.j && x.j.detail) || 'Не получилось';
+      }, function () { ok.disabled = false; err.textContent = 'Нет связи с сервером'; });
+    });
+    openSheet([backLink(openAccount), h('h2', { text: 'Удалить аккаунт' }), h('p', { class: 'cap', text: 'Аккаунт и копия данных в облаке удалятся. Чаты на этом устройстве останутся. Тариф, привязанный к аккаунту, пропадёт вместе с ним.' }), h('div', { class: 'group solo stack' }, pw), err, ok]);
+  }
   function openAccount() {
     if (!acct) { openAuth('in'); return; }
-    var u = acct.user || {}, nm = (S.settings.name || u.name || u.login || '').trim();
+    var st = S.settings, u = acct.user || {};
+    var saveSoft = function () { save(); renderAll(); };
+    var avBtn = h('button', { class: 'avbtn', type: 'button', 'aria-label': 'сменить фото' }, avEl('big'));
+    avBtn.addEventListener('click', function () { pickAvatar(openAccount); });
+    var avDel = st.avatar ? (function () { var b = h('button', { class: 'link', type: 'button', text: 'Убрать фото' }); b.addEventListener('click', function () { delete st.avatar; save(); refreshSide(); openAccount(); }); return b; })() : null;
+    var full = field('input', { type: 'text', maxlength: '60', value: st.fullName || '', placeholder: 'Полное имя', 'aria-label': 'полное имя' });
+    var nick = field('input', { type: 'text', maxlength: '24', value: st.name || u.name || '', placeholder: 'Как к тебе обращаться', 'aria-label': 'как обращаться' });
+    var job = h('select', { class: 'field sel', 'aria-label': 'чем занимаешься' }, [h('option', { value: '', text: 'Не выбрано' })].concat(JOBS.map(function (j) { return h('option', { value: j, text: j }); })));
+    job.value = JOBS.indexOf(st.role) >= 0 ? st.role : (st.role ? '' : '');
+    var about = field('textarea', { rows: '3', maxlength: '500', placeholder: 'Что важно знать обо мне', 'aria-label': 'о тебе' }); about.value = st.about || '';
+    full.addEventListener('change', function () { st.fullName = full.value.trim(); saveSoft(); });
+    nick.addEventListener('change', function () { var v = nick.value.trim().slice(0, 24); if (!v) return; st.name = v; if (acct.user) acct.user.name = v; try { ls.set('wchat-acct', JSON.stringify(acct)); } catch (e0) { /* ok */ } saveSoft(); api('/auth/name', { name: v }).then(function () {}, function () {}); });
+    job.addEventListener('change', function () { st.role = job.value; save(); });
+    about.addEventListener('change', function () { st.about = about.value.trim(); save(); });
+    var rowIn = function (title, desc, ctl) { return h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: title }), desc ? h('span', { text: desc }) : null), ctl); };
     var when = lastSync ? new Date(lastSync).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'ещё не было';
     var syncBtn = h('button', { class: 'btn block', type: 'button', text: 'Синхронизировать сейчас' });
     syncBtn.addEventListener('click', function () { syncBtn.disabled = true; syncBtn.textContent = 'синхронизирую…'; syncDown(false).then(function () { toast('Готово'); openAccount(); }); });
-    var out = twice('Выйти из аккаунта', 'Точно выйти? Нажми ещё раз', function () {
-      api('/auth/logout', {}).then(function () { /* токен и так удаляем у себя */ }, function () { /* без сети */ });
-      dropAcct('Ты вышел из аккаунта'); closeSheet();
+    var all = twice('Выйти на всех устройствах', 'Точно выйти везде? Нажми ещё раз', function () {
+      api('/auth/logout-all', {}).then(function () {}, function () {}); dropAcct('Ты вышел на всех устройствах'); closeSheet();
     }, 'danger');
+    var out = twice('Выйти из аккаунта', 'Точно выйти? Нажми ещё раз', function () {
+      api('/auth/logout', {}).then(function () {}, function () {}); dropAcct('Ты вышел из аккаунта'); closeSheet();
+    }, 'danger');
+    var sess = h('div', { class: 'sess' }, h('p', { class: 'cap', text: 'Загружаю…' }));
+    var loadSess = function () {
+      api('/auth/sessions', {}).then(function (x) {
+        sess.replaceChildren();
+        var list = (x.j && x.j.sessions) || [];
+        if (!x.ok || !list.length) { sess.append(h('p', { class: 'cap', text: 'Не получилось загрузить список' })); return; }
+        sess.append(h('div', { class: 'srow shead' }, h('span', { text: 'Устройство' }), h('span', { text: 'Местоположение' }), h('span', { text: 'Создано' }), h('span', { text: 'Обновлено' }), h('span')));
+        list.forEach(function (s) {
+          var end = s.current ? h('span') : (function () { var b = h('button', { class: 'sx', type: 'button', 'aria-label': 'завершить сеанс', title: 'Завершить сеанс' }, icon('close')); b.addEventListener('click', function () { b.disabled = true; api('/auth/session-end', { id: s.id }).then(loadSess); }); return b; })();
+          sess.append(h('div', { class: 'srow' },
+            h('span', { class: 'sd' }, h('b', { text: s.device, raw: 1 }), s.current ? h('i', { class: 'now', text: 'Текущий' }) : null),
+            h('span', { class: 'sm', text: s.place || '—', raw: 1 }), h('span', { class: 'sm', text: dateRu(s.created) }), h('span', { class: 'sm', text: dateRu(s.last) }), end));
+        });
+        if (list.length > 1) {
+          var others = h('button', { class: 'btn', type: 'button', text: 'Завершить все остальные' });
+          others.addEventListener('click', function () { others.disabled = true; api('/auth/sessions-end-others', {}).then(loadSess); });
+          sess.append(h('div', { class: 'sfoot2' }, others));
+        }
+      }, function () { sess.replaceChildren(h('p', { class: 'cap', text: 'Нет связи с сервером' })); });
+    };
+    loadSess();
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
-      h('h2', { text: 'Аккаунт' }),
-      h('div', { class: 'group acc' }, h('div', { class: 'acc-top' }, h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
-        h('div', { class: 'acc-t' }, h('b', { text: nm || u.login, raw: 1 }), h('span', { text: '@' + u.login, raw: 1 })))),
-      h('div', { class: 'group' }, grow2('Изменить имя', 'edit', nm, openRename), grow2('Изменить пароль', 'user', '', openPassword)),
+      h('h2', { text: 'Профиль' }),
+      h('div', { class: 'group acc2' },
+        rowIn('Фото профиля', 'PNG, JPEG или WebP, до 10 МБ.', h('div', { class: 'avwrap' }, avBtn, avDel)),
+        rowIn('Полное имя', '', full),
+        rowIn('Как к тебе обращаться?', '', nick),
+        rowIn('Чем ты занимаешься?', '', job),
+        h('div', { class: 'grow2 col' }, h('div', { class: 'gtxt' }, h('b', { text: 'О себе' }), h('span', { text: 'ИИ учитывает это во всех чатах.' })), about)),
+      h('p', { class: 'glabel', text: 'Аккаунт' }),
+      h('div', { class: 'group' },
+        rowIn('Логин', '', h('span', { class: 'gv', text: '@' + u.login, raw: 1 })),
+        grow2('Изменить пароль', 'edit', '', openPassword)),
       h('p', { class: 'glabel', text: 'Синхронизация' }),
       h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('download'), h('span', { class: 'gl', text: 'Последняя' }), h('span', { class: 'gv', text: when }))),
       syncBtn,
-      h('p', { class: 'cap', text: 'Чаты, проекты, память и Skills копируются в облако сами. Фото в облако не уходят, только текст.' }),
-      h('div', { class: 'group solo' }, out)
+      h('p', { class: 'cap', text: 'Чаты, проекты, память и Skills копируются в облако сами. Фото чатов в облако не уходят, только текст.' }),
+      h('p', { class: 'glabel', text: 'Активные сессии' }),
+      sess,
+      h('div', { class: 'group solo' }, out, all),
+      h('div', { class: 'group solo' }, grow2('Удалить аккаунт', 'trash', '', openDelete, 'dangerrow'))
     ], true);
   }
-
-
 
   /* ---------- окно настроек на компьютере: слева разделы, справа содержимое ---------- */
   var swSec = 'general';
@@ -1570,6 +1734,9 @@
       h('h2', { text: 'Общее' }),
       h('p', { class: 'glabel', text: 'Внешний вид' }),
       h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('palette'), h('span', { class: 'gl', text: 'Тема' }), seg)),
+      h('p', { class: 'glabel', text: 'Язык' }),
+      h('div', { class: 'group' }, grow2('Язык ответов', 'chat', (langOf(S.settings.lang) ? langOf(S.settings.lang)[1] : 'Как в сообщении'), function () { openLangPicker(openGeneral); })),
+      h('p', { class: 'cap', text: 'На каком языке ИИ отвечает. По умолчанию он отвечает на том языке, на котором ты пишешь.' }),
       h('p', { class: 'foot', text: 'DDX AI ' + VERSION, raw: 1 })
     ], true);
   }
@@ -1620,7 +1787,7 @@
     openSheet([
       h('div', { class: 'shead2' }, close, h('h2', { text: 'Настройки' }), h('span', { class: 'sp' })),
       h('div', { class: 'group acc' },
-        h('div', { class: 'acc-top' }, h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
+        h('div', { class: 'acc-top' }, avEl('big'),
           h('div', { class: 'acc-t' }, h('b', { text: nm || 'DDX AI', raw: 1 }), h('span', { text: 'Тариф ' + planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : '') }))), up),
       h('p', { class: 'glabel', text: 'Аккаунт' }),
       h('div', { class: 'group' },
@@ -1660,6 +1827,13 @@
     if (m.length >= lim().memory) { if (quiet) return false; limitToast('На тарифе ' + planWord() + ' в памяти до ' + lim().memory + ' записей'); return false; }
     m.push(t); save(); if (auto && !quiet) memNotice(); return true;
   }
+  function swSwitch(key, def) {
+    var st = S.settings, on = (st[key] == null ? def : st[key]);
+    var b = h('button', { class: 'switch' + (on ? ' on' : ''), type: 'button', role: 'switch', 'aria-label': key }, h('i'));
+    b.addEventListener('click', function () { st[key] = !(st[key] == null ? def : st[key]); b.classList.toggle('on', st[key]); save(); });
+    return b;
+  }
+  function swRow(title, desc, sw) { return h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: title }), h('span', { text: desc })), sw); }
   function openMemory() {
     var st = S.settings, list = h('div', { class: 'group memlist' }), cnt = h('span', { class: 'fcnt' });
     var fill = function () {
@@ -1683,7 +1857,11 @@
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
       h('h2', { text: 'Память' }),
       h('p', { class: 'cap', text: 'DDX AI учитывает это во всех чатах. Ещё можно написать в чате: «запомни, что …».' }),
-      h('div', { class: 'group' }, h('div', { class: 'grow' }, h('span', { class: 'gl', text: 'Использовать память' }), on)),
+      h('div', { class: 'group sw3' },
+        swRow('Поиск и использование чатов', 'Разрешить искать нужные сведения в прошлых чатах.', swSwitch('chatSearch', false)),
+        swRow('Создание памяти на основе чатов', 'Разрешить формировать память на основе твоих чатов.', on),
+        swRow('Включать в память деликатные темы', 'Разрешить сохранять сведения на деликатные темы, например о здоровье или религиозных убеждениях.', swSwitch('memSens', false))),
+      h('div', { class: 'group' }, h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: 'Экспорт памяти' }), h('span', { text: 'Скачай память в виде архива .zip с файлами Markdown.' })), (function () { var e = h('button', { class: 'btn', type: 'button', text: 'Экспортировать' }); e.addEventListener('click', exportMemory); return e; })())),
       h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Что я помню' }), cnt),
       list,
       h('div', { class: 'row-in' }, inp, add),
@@ -2078,7 +2256,7 @@
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
     busy = true; busyChat = c.id; syncSend(); clearError(); setThinking(true);
     var wantTitle = c.msgs.length === 1, memOn = S.settings.memOn !== false;
-    var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. Здоровье, деньги, политику, религию и документы не сохраняй. Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
+    var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
     fitImages(p.images).then(function (imgs) {
       if (p.imgAt >= 0) p.list[p.imgAt].images = imgs;

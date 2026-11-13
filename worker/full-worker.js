@@ -297,6 +297,9 @@ async function dbInit(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, days INTEGER NOT NULL, at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)')
   ]);
+  for (const col of ['device TEXT', 'place TEXT']) {
+    try { await env.DB.prepare('ALTER TABLE sessions ADD COLUMN ' + col).run(); } catch (e) { /* колонка уже есть */ }
+  }
   schemaReady = true;
 }
 
@@ -322,10 +325,22 @@ const LIFE_MS = 20 * 365 * 86400000;
 const userInfo = (u) => ({ id: u.id, login: u.login, name: u.name || '', pro_until: u.pro_until || 0, life: (u.pro_until || 0) - Date.now() > LIFE_MS });
 
 // токен лежит у человека, в базе только его sha-256
-async function startSession(env, userId) {
+function deviceOf(req) {
+  const ua = req.headers.get('User-Agent') || '';
+  const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /YaBrowser/.test(ua) ? 'Yandex' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Chrome|CriOS/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? (os === 'iOS' ? 'Mobile Safari' : 'Safari') : 'Браузер';
+  return (br + (os ? ' (' + os + ')' : '')).slice(0, 40);
+}
+function placeOf(req) {
+  const cf = req.cf || {};
+  return [cf.city, cf.region, cf.country].filter(Boolean).join(', ').slice(0, 60);
+}
+
+// токен лежит у человека, в базе только его sha-256
+async function startSession(env, userId, req) {
   const token = randHex(32);
   const now = Date.now();
-  await env.DB.prepare('INSERT INTO sessions (token, user_id, created, last) VALUES (?, ?, ?, ?)').bind(await sha256hex(token), userId, now, now).run();
+  await env.DB.prepare('INSERT INTO sessions (token, user_id, created, last, device, place) VALUES (?, ?, ?, ?, ?, ?)').bind(await sha256hex(token), userId, now, now, req ? deviceOf(req) : '', req ? placeOf(req) : '').run();
   return token;
 }
 
@@ -337,7 +352,8 @@ async function authUser(req, env) {
   const th = await sha256hex(m[1]);
   const row = await env.DB.prepare('SELECT u.id, u.login, u.name, u.pro_until, s.last AS last FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?').bind(th).first();
   if (!row) return null;
-  if (Date.now() - row.last > 3600000) { try { await env.DB.prepare('UPDATE sessions SET last = ? WHERE token = ?').bind(Date.now(), th).run(); } catch (e) { /* не страшно */ } }
+  row.th = th;
+  if (Date.now() - row.last > 600000) { try { await env.DB.prepare('UPDATE sessions SET last = ? WHERE token = ?').bind(Date.now(), th).run(); } catch (e) { /* не страшно */ } }
   return row;
 }
 
@@ -378,7 +394,7 @@ async function authRoute(req, env, path, origin) {
     try {
       const r = await env.DB.prepare('INSERT INTO users (login, name, salt, hash, pro_until, created) VALUES (?, ?, ?, ?, 0, ?)').bind(login, name, salt, hash, Date.now()).run();
       const id = r.meta.last_row_id;
-      const token = await startSession(env, id);
+      const token = await startSession(env, id, req);
       return reply(200, { token: token, user: userInfo({ id: id, login: login, name: name, pro_until: 0 }), hasData: false }, origin);
     } catch (e) {
       if (/UNIQUE/i.test(String(e.message || e))) return reply(409, { error: 'taken', detail: 'такой логин уже занят' }, origin);
@@ -398,7 +414,7 @@ async function authRoute(req, env, path, origin) {
       if (env.KV) await env.KV.put(fk, String(num(await env.KV.get(fk)) + 1), { expirationTtl: 3600 });
       return reply(401, { error: 'bad', detail: 'неверный логин или пароль' }, origin);
     }
-    const token = await startSession(env, u.id);
+    const token = await startSession(env, u.id, req);
     const has = await env.DB.prepare('SELECT updated FROM data WHERE user_id = ?').bind(u.id).first();
     return reply(200, { token: token, user: userInfo(u), hasData: !!has }, origin);
   }
@@ -407,6 +423,24 @@ async function authRoute(req, env, path, origin) {
   if (!u) return reply(401, { error: 'auth' }, origin);
 
   if (path === '/auth/me') return reply(200, { user: userInfo(u) }, origin);
+
+  // активные входы: список, завершение одного, всех остальных, всех сразу
+  if (path === '/auth/sessions') {
+    const rs = await env.DB.prepare('SELECT token, device, place, created, last FROM sessions WHERE user_id = ? ORDER BY last DESC LIMIT 50').bind(u.id).all();
+    return reply(200, { sessions: (rs.results || []).map((s) => ({ id: s.token.slice(0, 16), device: s.device || 'Устройство', place: s.place || '', created: s.created, last: s.last, current: s.token === u.th })) }, origin);
+  }
+  if (path === '/auth/session-end') {
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND substr(token, 1, 16) = ? AND token != ?').bind(u.id, String(b.id || ''), u.th).run();
+    return reply(200, { ok: true }, origin);
+  }
+  if (path === '/auth/sessions-end-others') {
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').bind(u.id, u.th).run();
+    return reply(200, { ok: true }, origin);
+  }
+  if (path === '/auth/logout-all') {
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(u.id).run();
+    return reply(200, { ok: true }, origin);
+  }
 
   if (path === '/auth/logout') {
     const m = /^Bearer ([a-f0-9]{64})$/.exec(req.headers.get('Authorization') || '');
