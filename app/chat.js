@@ -921,7 +921,7 @@
   document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); } });
 
   var sideUI = null;
-  function refreshSide() { if (sideUI) sideUI.fill(); }
+  function refreshSide() { if (sideUI) sideUI.fill(); if (typeof renderProjView === 'function') renderProjView(); }
   // после действия над чатом: на телефоне вернуться к списку, на компьютере закрыть окно (список слева уже виден)
   function listsHome() { closeSheet(); refreshSide(); }
 
@@ -2517,6 +2517,48 @@
     var out = [], size = 0;
     for (var i = 0; i < chunks.length && size < 7000; i++) { var k = chunks[i]; out.push('[' + k.f + '] ' + k.t); size += k.t.length + k.f.length + 4; }
     return out.join('\n\n').slice(0, 8500);
+  }
+
+
+  function plural(n, a, b, d) { var m = n % 100, k = n % 10; return n + ' ' + (m > 10 && m < 20 ? d : k === 1 ? a : k >= 2 && k <= 4 ? b : d); }
+  /* нижние вкладки на телефоне: чат и проекты */
+  var tabNow = 'chat', projOpen = {};
+  var tabsEl = h('nav', { class: 'tabs', id: 'tabs', 'aria-label': 'разделы' });
+  var projView = h('section', { class: 'projview', id: 'projview', hidden: true });
+  document.body.append(projView, tabsEl);
+  var tabBtns = {};
+  [['chat', 'Чат', 'chat'], ['proj', 'Проекты', 'folder']].forEach(function (t) {
+    var b = h('button', { class: 'tab' + (t[0] === 'chat' ? ' on' : ''), type: 'button', 'data-k': t[0] }, icon(t[2]), h('span', { text: t[1] }));
+    b.addEventListener('click', function () { setTab(t[0]); }); tabBtns[t[0]] = b; tabsEl.append(b);
+  });
+  function setTab(k) {
+    tabNow = k;
+    Object.keys(tabBtns).forEach(function (x) { tabBtns[x].classList.toggle('on', x === k); });
+    document.body.classList.toggle('tab-proj', k === 'proj'); projView.hidden = k !== 'proj';
+    if (k === 'proj') { renderProjView(); window.scrollTo(0, 0); }
+  }
+  function renderProjView() {
+    if (tabNow !== 'proj') return;
+    var add = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'новый проект' }, icon('plus')); add.addEventListener('click', function () { projectForm(null); });
+    var list = h('div', { class: 'pvlist' });
+    var ps = S.projects.slice().sort(byProj);
+    if (!ps.length) list.append(h('p', { class: 'cap pvempty', text: 'проектов пока нет. проект собирает чаты, инструкции и файлы в одном месте.' }),
+      h('button', { class: 'btn solid block', type: 'button', text: 'создать проект', onclick: function () { projectForm(null); } }));
+    ps.forEach(function (p) {
+      var chats = S.chats.filter(function (x) { return x.project === p.id; }).sort(byUpdated), open = !!projOpen[p.id];
+      var nf = (p.files || []).length;
+      var head = h('button', { class: 'pvhead', type: 'button' }, icon('folder'),
+        h('span', { class: 'pvt' }, h('b', { text: p.name, raw: 1 }), h('em', { text: plural(chats.length, 'чат', 'чата', 'чатов') + (nf ? ' · ' + plural(nf, 'файл', 'файла', 'файлов') : ''), raw: 1 })),
+        h('span', { class: 'ch' + (open ? ' open' : '') }, icon('down')));
+      var more = h('button', { class: 'icon-btn sm', type: 'button', 'aria-label': 'настройки проекта' }, icon('more'));
+      more.addEventListener('click', function (e) { e.stopPropagation(); projectForm(p); });
+      var kids = h('div', { class: 'pvkids' }); kids.hidden = !open;
+      kids.append(h('button', { class: 'pvnew', type: 'button', text: '+ чат в проекте', onclick: function () { S.open[p.id] = true; newChat(p.id); setTab('chat'); } }));
+      chats.forEach(function (x) { kids.append(h('button', { class: 'pvchat', type: 'button' }, h('span', { text: x.title, raw: 1 }))); kids.lastChild.addEventListener('click', function () { openChat(x.id); setTab('chat'); }); });
+      head.addEventListener('click', function () { projOpen[p.id] = !projOpen[p.id]; kids.hidden = !projOpen[p.id]; head.lastChild.classList.toggle('open', !!projOpen[p.id]); });
+      list.append(h('div', { class: 'pvcard' }, h('div', { class: 'pvrow' }, head, more), kids));
+    });
+    projView.replaceChildren(h('div', { class: 'pvbar' }, h('h1', { text: 'Проекты' }), add), list);
   }
 
   var reqCtl = null, stopped = false;
