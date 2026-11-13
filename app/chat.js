@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.4';
+  var VERSION = 'v2.4.1';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -1391,13 +1391,24 @@
   }
 
   /* ---------- память ---------- */
-  function addMemory(t, auto) {
+  var memTimer = 0;
+  function memNotice() {
+    var bar = $('#membar'); clearTimeout(memTimer);
+    var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'закрыть' }, icon('close'));
+    var closeIt = function () { bar.classList.add('out'); setTimeout(function () { if (bar.classList.contains('out')) { bar.hidden = true; bar.classList.remove('out'); measure(); } }, 260); clearTimeout(memTimer); };
+    x.addEventListener('click', function (e) { e.stopPropagation(); closeIt(); });
+    var t = h('button', { class: 'mem-t', type: 'button' }, icon('brain'), h('span', { text: 'Память обновлена' }));
+    t.addEventListener('click', function () { closeIt(); openMemory(); });
+    bar.classList.remove('out'); bar.hidden = false; bar.replaceChildren(t, x); measure();
+    memTimer = setTimeout(closeIt, 7000);
+  }
+  function addMemory(t, auto, quiet) {
     var m = S.settings.memory || (S.settings.memory = []);
     t = String(t || '').trim().slice(0, 200);
     if (!t) return false;
-    if (m.indexOf(t) >= 0) { if (!auto) toast('Это уже в памяти'); return false; }
-    if (m.length >= lim().memory) { limitToast('На тарифе ' + planWord() + ' в памяти до ' + lim().memory + ' записей'); return false; }
-    m.push(t); save(); if (auto) toast('Запомнил'); return true;
+    if (m.indexOf(t) >= 0) { if (!auto && !quiet) toast('Это уже в памяти'); return false; }
+    if (m.length >= lim().memory) { if (quiet) return false; limitToast('На тарифе ' + planWord() + ' в памяти до ' + lim().memory + ' записей'); return false; }
+    m.push(t); save(); if (auto && !quiet) memNotice(); return true;
   }
   function openMemory() {
     var st = S.settings, list = h('div', { class: 'group memlist' }), cnt = h('span', { class: 'fcnt' });
@@ -1781,8 +1792,8 @@
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
     busy = true; busyChat = c.id; syncSend(); clearError(); setThinking(true);
-    var wantTitle = c.msgs.length === 1;
-    var p = buildPayload(c), instr = buildInstructions(c, wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : '');
+    var wantTitle = c.msgs.length === 1, memOn = S.settings.memOn !== false;
+    var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. Здоровье, деньги, политику, религию и документы не сохраняй. Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
     fitImages(p.images).then(function (imgs) {
       if (p.imgAt >= 0) p.list[p.imgAt].images = imgs;
@@ -1800,12 +1811,14 @@
       if (here()) setThinking(false);
       if (x.ok && x.j.answer) {
         var ansText = String(x.j.answer);
-        var tm = /\[\[\s*(?:title|название)\s*:\s*([^\]\n]{1,60}?)\s*(?:\]\]?)?\s*$/i.exec(ansText);
-        if (tm) {
-          ansText = ansText.slice(0, tm.index).trim();
-          var nt = tm[1].replace(/["«»“”.]+$/g, '').replace(/^["«»“”]+/, '').trim();
-          if (wantTitle && nt) { c.title = nt.charAt(0).toUpperCase() + nt.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
-        }
+        var facts = [], ttl = '';
+        ansText = ansText.replace(/\[\[\s*(title|название|memory|память)\s*:\s*([^\]\n]{1,200}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
+          v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
+          if (v) { if (/^(title|название)$/i.test(k)) ttl = v; else facts.push(v); }
+          return '';
+        }).replace(/\n{3,}/g, '\n\n').trim();
+        if (wantTitle && ttl) { c.title = ttl.charAt(0).toUpperCase() + ttl.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
+        if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
         var m = { id: uid(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
         c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0, plan: x.j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
