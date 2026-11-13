@@ -128,6 +128,7 @@
     });
   }
   function save() {
+    refreshSide();
     if (ls.set(KEY, pack(false))) return;
     // память переполнена: сначала убираем превью фото
     if (!ls.set(KEY, pack(true))) toast('не хватает памяти: удали старые чаты');
@@ -389,11 +390,17 @@
     box.append(h('div', { class: 'row folder' }, main, more), kids);
   }
 
-  function openChats(query) {
+  var wide = function () { return window.matchMedia && matchMedia('(min-width: 900px)').matches; };
+  var sideUI = null;
+  function refreshSide() { if (sideUI) sideUI.fill(); }
+  // после действия над чатом: на телефоне вернуться к списку, на компьютере закрыть окно (список слева уже виден)
+  function listsHome() { if (wide()) { closeSheet(); refreshSide(); } else openChats(); }
+
+  function listUI() {
     var list = h('div', { class: 'stack' });
-    var search = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search', value: query || '' });
+    var input = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search' });
     var fill = function () {
-      var q = search.value.trim().toLowerCase();
+      var q = input.value.trim().toLowerCase();
       list.replaceChildren();
       if (q) {
         var found = S.chats.filter(function (c) { return c.title.toLowerCase().indexOf(q) >= 0 || c.msgs.some(function (m) { return m.text.toLowerCase().indexOf(q) >= 0; }); }).sort(byUpdated);
@@ -411,35 +418,43 @@
       if (!rest.length) list.append(h('p', { class: 'cap', text: S.chats.length ? 'остальные чаты лежат в проектах или закреплены' : 'пока нет чатов. напиши первый вопрос.' }));
       rest.forEach(function (c) { list.append(chatRow(c)); });
     };
-    search.addEventListener('input', fill);
+    input.addEventListener('input', fill);
     fill();
-    openSheet([
-      h('h2', { text: 'чаты' }),
-      h('div', { class: 'two' },
+    return {
+      input: input, fill: fill, list: list,
+      top: h('div', { class: 'two' },
         h('button', { class: 'btn solid', type: 'button', text: 'новый чат', onclick: function () { newChat(null); closeSheet(); } }),
         h('button', { class: 'btn', type: 'button', text: 'новый проект', onclick: function () { projectForm(null); } })),
-      h('div', { class: 'searchbox' }, search),
-      list
-    ], true);
+      search: h('div', { class: 'searchbox' }, input)
+    };
+  }
+  function openChats() {
+    var u = listUI();
+    openSheet([h('h2', { text: 'чаты' }), u.top, u.search, u.list], true);
+  }
+  // постоянная панель слева на широком экране
+  function buildSide() {
+    var side = $('#side'); sideUI = listUI();
+    side.append(h('div', { class: 'side-brand' }, logo('logo'), h('span', { text: 'DDX AI' })), sideUI.top, sideUI.search, sideUI.list);
   }
 
   function chatMenu(c) {
     var opt = function (label, ic, fn) { var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label }), icon(ic)); b.addEventListener('click', fn); return b; };
     var pr = projectById(c.project);
     openSheet([
-      backLink(function () { openChats(); }),
+      backLink(function () { listsHome(); }),
       h('h2', { text: c.title }),
       h('p', { class: 'cap', text: (pr ? 'проект «' + pr.name + '» · ' : '') + c.msgs.length + ' сообщ.' }),
       h('div', { class: 'form' },
-        opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { c.pinned = !c.pinned; save(); openChats(); }),
+        opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { c.pinned = !c.pinned; save(); listsHome(); }),
         opt('переименовать', 'edit', function () { renameChat(c); }),
         opt(pr ? 'перенести в другой проект' : 'в проект', 'folder', function () { moveChat(c); }),
-        twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); openChats(); }, 'danger'))
+        twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); listsHome(); }, 'danger'))
     ]);
   }
   function renameChat(c) {
     var inp = field('input', { type: 'text', maxlength: '60', value: c.title, 'aria-label': 'название чата' });
-    var ok = function () { var t = inp.value.trim(); if (t) { c.title = t.slice(0, 60); save(); updateHeader(); } openChats(); };
+    var ok = function () { var t = inp.value.trim(); if (t) { c.title = t.slice(0, 60); save(); updateHeader(); } listsHome(); };
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') ok(); });
     openSheet([backLink(function () { chatMenu(c); }), h('h2', { text: 'название' }),
       h('div', { class: 'form' }, inp, h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))]);
@@ -449,7 +464,7 @@
     var put = function (label, id) {
       var on = (c.project || null) === id;
       var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label }), on ? icon('check') : icon(id ? 'folder' : 'list'));
-      b.addEventListener('click', function () { c.project = id; save(); updateHeader(); openChats(); });
+      b.addEventListener('click', function () { c.project = id; save(); updateHeader(); listsHome(); });
       box.append(b);
     };
     put('без проекта', null);
@@ -466,15 +481,15 @@
       var n = name.value.trim(); if (!n) { name.focus(); return; }
       if (p) { p.name = n.slice(0, 40); p.instructions = instr.value.trim(); }
       else { p = { id: uid(), name: n.slice(0, 40), instructions: instr.value.trim(), created: Date.now() }; S.projects.push(p); S.open[p.id] = true; if (moveIn) moveIn.project = p.id; }
-      save(); updateHeader(); openChats();
+      save(); updateHeader(); listsHome();
     };
-    var nodes = [backLink(function () { openChats(); }), h('h2', { text: p ? 'проект' : 'новый проект' }),
+    var nodes = [backLink(function () { listsHome(); }), h('h2', { text: p ? 'проект' : 'новый проект' }),
       h('div', { class: 'form' }, name, instr,
         h('p', { class: 'cap', text: 'этот текст добавляется к каждому чату проекта, чтобы ии помнил контекст.' }),
         h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))];
     if (p) nodes[2].append(twice('удалить проект', 'точно удалить? чаты останутся', function () {
       S.chats.forEach(function (c) { if (c.project === p.id) c.project = null; });
-      S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); save(); updateHeader(); openChats();
+      S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); save(); updateHeader(); listsHome();
     }, 'danger'));
     openSheet(nodes);
   }
@@ -722,7 +737,17 @@
   ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(function () { toBottom(true); }, 320); });
   ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); }, 60); });
 
+  // горячие клавиши на компьютере: ctrl/cmd+k поиск по чатам, / в поле ввода, ctrl/cmd+shift+o не трогаем (занято браузером)
+  document.addEventListener('keydown', function (e) {
+    var typing = /^(input|textarea)$/i.test((document.activeElement || {}).tagName || '');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (wide() && sideUI) sideUI.input.focus(); else openChats();
+    } else if (e.key === '/' && !typing && sheet.hidden) { e.preventDefault(); ta.focus(); }
+  });
+  buildSide();
   load(); renderAll(); renderAtts(); grow(); syncSend(); measure();
+  refreshSide();
   toBottom(false);
 
   var splash = $('#splash');
