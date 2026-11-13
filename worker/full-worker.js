@@ -672,7 +672,8 @@ export default {
     if (!env.GROQ_API_KEY) return reply(500, { error: 'no key', detail: 'в воркере нет секрета GROQ_API_KEY' }, origin);
 
     const raw = await req.text();
-    if (raw.length > 600000) return reply(413, { error: 'too big' }, origin);
+    // фото для улучшения весят больше обычных запросов
+    if (raw.length > (raw.indexOf('"image-up"') >= 0 ? 4000000 : 600000)) return reply(413, { error: 'too big' }, origin);
     let body;
     try { body = JSON.parse(raw); } catch (e) { return reply(400, { error: 'json' }, origin); }
 
@@ -740,9 +741,20 @@ export default {
           const aspect = ['1:1', '2:3', '3:2', '16:9', '9:16'].includes(String(body.aspect)) ? String(body.aspect) : '1:1';
           kmodel = 'grok-imagine/text-to-image'; kinput = { prompt: prompt, aspect_ratio: aspect };
         } else {
-          const src = String(body.taskId || '');
-          if (!idRe.test(src)) return reply(400, { error: 'task' }, origin);
-          kmodel = 'grok-imagine/upscale'; kinput = { task_id: src };
+          // улучшение: либо ссылка на картинку (уже созданную здесь), либо загруженное фото (data url), которое сначала кладём в хранилище kie
+          let srcUrl = String(body.url || '');
+          if (!/^https:\/\/[^\s]{4,600}$/.test(srcUrl)) srcUrl = '';
+          if (!srcUrl) {
+            const im = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(body.image || ''));
+            if (!im) return reply(400, { error: 'image' }, origin);
+            const ur = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', { method: 'POST', headers: kh, body: JSON.stringify({ base64Data: String(body.image), uploadPath: 'images/ddx-ai', fileName: 'photo-' + Date.now() + '.' + (im[1] === 'jpeg' ? 'jpg' : im[1]) }) });
+            const uj = await ur.json().catch(() => ({}));
+            srcUrl = uj && uj.data && uj.data.downloadUrl ? String(uj.data.downloadUrl) : '';
+            if (!srcUrl) return reply(502, { error: 'upstream', detail: 'kie (загрузка фото): ' + String(uj.msg || ur.status).slice(0, 160) }, origin);
+          }
+          // модель по умолчанию topaz/image-upscale; для recraft/crisp-upscale задай KIE_UPSCALE_MODEL
+          kmodel = String(env.KIE_UPSCALE_MODEL || 'topaz/image-upscale');
+          kinput = /recraft/.test(kmodel) ? { image: srcUrl } : { image_url: srcUrl, upscale_factor: String(env.KIE_UPSCALE_FACTOR || '2') };
         }
         const cr = await fetch('https://api.kie.ai/api/v1/jobs/createTask', { method: 'POST', headers: kh, body: JSON.stringify({ model: kmodel, input: kinput }) });
         const cj = await cr.json().catch(() => ({}));

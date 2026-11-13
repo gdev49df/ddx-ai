@@ -746,7 +746,9 @@
     var c = curChat(), last = c && c.msgs[c.msgs.length - 1];
     if (!c || !last || last.role !== 'user') return;
     var q = String(last.text || '').trim();
-    if (!q) { toast('Опиши словами, что нарисовать'); return; }
+    var photo = (last.big && last.big[0]) || (last.full && last.full[0]) || '';
+    if (!q && !photo) { toast('Опиши словами, что нарисовать, или прикрепи фото для улучшения'); return; }
+    if (photo) { photoUpscale(c, photo); return; }
     busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
     var here = function () { return S.cur === c.id; };
     kiePost({ mode: 'image', prompt: q, aspect: aspectOf(q) }).then(function (r) {
@@ -764,11 +766,30 @@
       if (here()) showError(msg); else toast(msg);
     }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
   }
+  // улучшение загруженного фото
+  function photoUpscale(c, photo) {
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
+    var here = function () { return S.cur === c.id; };
+    kiePost({ mode: 'image-up', image: photo }).then(function (r) {
+      return kiePoll(r.taskId).then(function (urls) { return { task: r.taskId, urls: urls }; });
+    }).then(function (x) {
+      if (here()) setThinking(false);
+      var m = { id: uid(), at: Date.now(), role: 'assistant', text: '[улучшенное фото]', thumbs: [], next: [], img: { urls: x.urls.slice(0, 1), task: x.task, up: true } };
+      c.msgs.push(m); c.updated = Date.now(); save();
+      if (here()) { var el = msgEl(m, true); chat.append(el); requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
+      else toast('фото готово в чате «' + c.title + '»');
+    }).catch(function (e) {
+      if (here()) setThinking(false);
+      if (stopped) { toast('остановил'); return; }
+      var msg = e && e.message ? e.message : 'нет связи с воркером';
+      if (here()) showError(msg); else toast(msg);
+    }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
+  }
   function upscaleImage(m, btn) {
     if (busy || !m.img || m.img.up) return;
     busy = true; stopped = false; syncSend(); btn.disabled = true; btn.querySelector('span').textContent = 'Улучшаю…';
     toast('Улучшаю картинку, это займёт до минуты');
-    kiePost({ mode: 'image-up', taskId: m.img.task }).then(function (r) { return kiePoll(r.taskId); }).then(function (urls) {
+    kiePost({ mode: 'image-up', url: m.img.urls[0] }).then(function (r) { return kiePoll(r.taskId); }).then(function (urls) {
       m.img.urls = urls.slice(0, 1); m.img.up = true; save(); renderAll(); toast('Готово, качество улучшено');
     }).catch(function (e) {
       if (!stopped) toast(e && e.message ? e.message : 'не получилось улучшить');
@@ -2507,7 +2528,7 @@
     var url = URL.createObjectURL(file);
     return loadImg(url).then(function (im) {
       URL.revokeObjectURL(url);
-      return { id: uid(), full: encode(im, 1024, 0.72), thumb: encode(im, 144, 0.55) };
+      return { id: uid(), full: encode(im, 1024, 0.72), big: S.settings.model === 'imagine' ? encode(im, 1600, 0.86) : '', thumb: encode(im, 144, 0.55) };
     }, function (e) { URL.revokeObjectURL(url); throw e; });
   }
   var size = function (list) { return list.reduce(function (n, u) { return n + u.length; }, 0); };
@@ -2711,7 +2732,7 @@
     if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
     var c = ensureChat(), first = !c.msgs.length;
     var pics = atts.filter(function (a) { return !a.kind; }), docs = atts.filter(function (a) { return a.kind === 'file'; });
-    var m = { id: uid(), role: 'user', text: text, thumbs: pics.map(function (a) { return a.thumb; }), full: pics.map(function (a) { return a.full; }), files: docs.map(function (a) { return { name: a.name, text: a.text }; }) };
+    var m = { id: uid(), role: 'user', text: text, thumbs: pics.map(function (a) { return a.thumb; }), full: pics.map(function (a) { return a.full; }), big: pics.map(function (a) { return a.big || ''; }), files: docs.map(function (a) { return { name: a.name, text: a.text }; }) };
     c.msgs.push(m); c.updated = Date.now();
     if (first) c.title = makeTitle(text || (docs[0] ? docs[0].name : ''));
     save();
@@ -2777,7 +2798,7 @@
     var applyModel = function () {
       var im = S.settings.model === 'imagine';
       mlab.textContent = curM()[1]; web.hidden = thk.hidden = im;
-      ta.placeholder = im ? 'Опиши картинку' : 'Спроси что угодно';
+      ta.placeholder = im ? 'Опиши картинку или прикрепи фото' : 'Спроси что угодно';
     };
     var closeM = function () { if (mpop) { mpop.remove(); mpop = null; } mb.classList.remove('open'); };
     mb.addEventListener('click', function (e) {
@@ -2785,7 +2806,7 @@
       mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
         var on = curM()[0] === m[0];
         var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
-        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[0] === 'imagine' ? 'Imagine: опиши картинку, и я её нарисую' : 'Liama 2.7: обычный чат'); });
+        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[0] === 'imagine' ? 'Imagine: опиши картинку, и я её нарисую, или прикрепи фото, и я улучшу его' : 'Liama 2.7: обычный чат'); });
         return it;
       }));
       var r = mb.getBoundingClientRect();
