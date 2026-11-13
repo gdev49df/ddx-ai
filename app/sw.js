@@ -1,5 +1,5 @@
 // при изменении файлов меняй версию, чтобы кэш обновился
-const CACHE = 'wchat-v43';
+const CACHE = 'wchat-v44';
 const FILES = [
   './',
   './index.html',
