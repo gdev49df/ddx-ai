@@ -1130,3 +1130,14 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .vsw .vn { font-size: 12.5px; min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
 .vsw .vb:disabled { opacity: .3; }
 .cap-in .ib.mic.busy { opacity: .6; animation: recp 1.2s ease-in-out infinite; }
+
+/* выбор модели */
+.tchip.model { margin-left: auto; padding: 0 8px 0 12px; gap: 4px; color: var(--mute); }
+.tchip.model svg.i { width: 14px; height: 14px; transition: transform .25s var(--ease); }
+.tchip.model.open { color: var(--ink); border-color: var(--mute2); }
+.tchip.model.open svg.i { transform: rotate(180deg); }
+.modelpop { min-width: 240px; padding: 6px; }
+.modelpop .mitem { align-items: center; gap: 12px; justify-content: space-between; width: 100%; text-align: left; }
+.modelpop .sk-t { display: grid; gap: 2px; }
+.modelpop .sk-t em { font-style: normal; font-size: 12.5px; color: var(--mute); }
+.modelpop .mitem svg.i { width: 16px; height: 16px; flex: none; }

@@ -2682,7 +2682,23 @@
     var sync = function () { web.classList.toggle('on', !!S.settings.web); web.setAttribute('aria-pressed', S.settings.web ? 'true' : 'false'); thk.classList.toggle('on', thinkOn); thk.setAttribute('aria-pressed', thinkOn ? 'true' : 'false'); };
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
-    bar.append(web, thk); sync();
+    // выбор модели: пока одна
+    var MODELS = [['liama-2.7', 'Liama 2.7', 'Быстрые и точные ответы на каждый день']];
+    var cur = MODELS[0], mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, h('span', { text: cur[1], raw: 1 }), icon('down')), mpop = null;
+    var closeM = function () { if (mpop) { mpop.remove(); mpop = null; } mb.classList.remove('open'); };
+    mb.addEventListener('click', function (e) {
+      e.stopPropagation(); if (mpop) { closeM(); return; }
+      mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
+        var it = h('button', { class: 'pi mitem on', type: 'button', role: 'menuitemradio', 'aria-checked': 'true' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), icon('check'));
+        it.addEventListener('click', closeM); return it;
+      }));
+      var r = mb.getBoundingClientRect();
+      mpop.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; mpop.style.left = 'auto'; mpop.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+      document.body.append(mpop); mb.classList.add('open');
+    });
+    document.addEventListener('click', function (e) { if (mpop && !mpop.contains(e.target)) closeM(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
+    bar.append(web, thk, mb); sync();
     window.syncTools = sync;
   })();
   // выдержки из файлов проекта, подходящие к вопросу
