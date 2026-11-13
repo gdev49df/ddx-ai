@@ -650,3 +650,14 @@ mark.hl.cur { background: var(--paper); color: var(--on-paper); }
 #ver { margin: 30px 4px 0; font-size: 10.5px; letter-spacing: .04em; opacity: .38; }
 .foot.center { font-size: 11px; opacity: .45; }
 .sver { font-size: 10px; opacity: .35; }
+
+/* no horizontal page scroll: wide content scrolls inside its own box */
+html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+.app, #view, .bar { min-width: 0; max-width: 100%; }
+.chat { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.msg { min-width: 0; max-width: 100%; }
+.msg.me { max-width: 84%; }
+.md, .md p, .md li { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.md .tbl { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.md table { width: max-content; min-width: 100%; }
+.md pre, .md img { max-width: 100%; }
