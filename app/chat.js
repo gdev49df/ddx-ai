@@ -1334,10 +1334,10 @@
     c.pinned = !c.pinned; save(); return true;
   }
   var PLANS = [
-    { id: 'free', name: 'free', price: 0, line: '5 сообщений каждые 12 часов' },
-    { id: 'pro', name: 'pro', price: 1090, limit: 17 },
-    { id: 'max', name: 'max', price: 5990, limit: 50, badge: 'популярный', hot: true },
-    { id: 'ultra', name: 'ultra', price: 11990, limit: 135, badge: 'выгодно' }
+    { id: 'free', name: 'free', price: 0, line: '12 сообщений каждые 12 часов' },
+    { id: 'pro', name: 'pro', price: 1090, limit: 40 },
+    { id: 'max', name: 'max', price: 5990, limit: 120, badge: 'популярный', hot: true },
+    { id: 'ultra', name: 'ultra', price: 11990, limit: 300, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {

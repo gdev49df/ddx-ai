@@ -689,9 +689,9 @@ export default {
       // если раньше вставлял старую версию этой вставки, замени её целиком на эту
       if (body.mode === 'chat' || body.mode === 'sub') {
         // лимит как у chatgpt: скользящее окно 12 часов. каждое сообщение занимает слот и освобождает его через 12 часов после отправки.
-        // free 5, pro 17, max 50, ultra 135 сообщений в окне. месяц или год влияют на цену и срок подписки, не на лимит
-        const PLANS = { pro: 17, max: 50, ultra: 135 };
-        const FREE_DAY = Number(env.CHAT_LIMIT || 5);
+        // free 12, pro 40, max 120, ultra 300 сообщений в окне. месяц или год влияют на цену и срок подписки, не на лимит
+        const PLANS = { pro: 40, max: 120, ultra: 300 };
+        const FREE_DAY = Number(env.CHAT_LIMIT || 12);
         const WIN_MS = 43200000;
         const device = String(body.device || '');
         if (env.KV && !/^[A-Za-z0-9-]{16,64}$/.test(device)) return reply(400, { error: 'device' }, origin);
