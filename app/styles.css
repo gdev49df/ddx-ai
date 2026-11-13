@@ -1019,3 +1019,16 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
 .msg-actions { gap: 0; margin-left: -6px; }
 .msg-actions .ab { width: 28px; height: 30px; }
 .msg-actions .mtime { margin-left: 22px; }
+
+/* сортировка в сайдбаре */
+.shrow { display: flex; align-items: center; gap: 2px; }
+.shrow .shead { flex: 1; min-width: 0; }
+.stool { all: unset; box-sizing: border-box; width: 30px; height: 30px; margin-top: 10px; display: grid; place-items: center; border-radius: 9px; color: var(--mute); cursor: pointer; transition: background .2s, color .2s; }
+.stool:hover, .stool:focus-visible { background: var(--bg2); color: var(--fg, inherit); }
+.stool svg.i { width: 17px; height: 17px; }
+.side { position: relative; }
+.smenu { position: absolute; z-index: 60; min-width: 210px; padding: 6px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0,0,0,.32); animation: rise .18s var(--ease) both; }
+.smt { margin: 4px 10px 4px; font-size: 12px; font-weight: 600; color: var(--mute); }
+.smo { all: unset; box-sizing: border-box; width: 100%; min-height: 38px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 9px; font-size: 14px; cursor: pointer; }
+.smo:hover, .smo:focus-visible { background: var(--line); }
+.smo svg.i { width: 16px; height: 16px; }

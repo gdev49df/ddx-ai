@@ -45,6 +45,7 @@
 
   var ICONS = {
     arrowup: '<path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/>',
+    sort: '<path d="M4.5 7h15M7.5 12h9M10.5 17h3"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.4M12 18.1v2.4M3.5 12h2.4M18.1 12h2.4M6 6l1.7 1.7M16.3 16.3L18 18M18 6l-1.7 1.7M7.7 16.3L6 18"/>',
@@ -941,7 +942,10 @@
   })();
 
   var ordCmp = function (fb) { return function (a, b) { var x = a.ord != null, y = b.ord != null; if (x && y) return a.ord - b.ord; if (x) return 1; if (y) return -1; return fb(a, b); }; };
-  var bySide = ordCmp(byUpdated), byProj = ordCmp(function (a, b) { return b.created - a.created; });
+  var SORTS = [['upd', 'Последняя активность'], ['new', 'Дата создания'], ['abc', 'По алфавиту']];
+  var sortMode = function () { var m = S.settings.sort; return SORTS.some(function (s) { return s[0] === m; }) ? m : 'upd'; };
+  var sortCmp = function (a, b) { var m = sortMode(); if (m === 'new') return b.created - a.created; if (m === 'abc') return String(a.title).localeCompare(String(b.title), 'ru'); return b.updated - a.updated; };
+  var bySide = ordCmp(sortCmp), byProj = ordCmp(function (a, b) { return b.created - a.created; });
   function buildSide() {
     var side = $('#side');
     var input = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search' });
@@ -959,7 +963,25 @@
       main.addEventListener('click', function () { openChat(c.id); closeSheet(); setDrawer(false); });
       var rw = h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : ''), 'data-id': c.id }, main, more); return rw;
     };
-    var section = function (key, label, items) {
+    var sortTool = function () {
+      var b = h('button', { class: 'stool', type: 'button', 'aria-label': 'сортировка', title: 'Сортировка' }, icon('sort'));
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var old = document.querySelector('.smenu'); if (old) { old.remove(); return; }
+        var m = h('div', { class: 'smenu' }, h('p', { class: 'smt', text: 'Сортировка' }));
+        SORTS.forEach(function (s) {
+          var o = h('button', { class: 'smo' + (sortMode() === s[0] ? ' on' : ''), type: 'button' }, h('span', { text: s[1] }), sortMode() === s[0] ? icon('check') : null);
+          o.addEventListener('click', function (ev) { ev.stopPropagation(); S.settings.sort = s[0]; save(); m.remove(); fill(); });
+          m.append(o);
+        });
+        var r = b.getBoundingClientRect(), sr = $('#side').getBoundingClientRect();
+        m.style.top = (r.bottom - sr.top + 6) + 'px'; m.style.right = Math.max(8, sr.right - r.right) + 'px';
+        $('#side').append(m);
+        setTimeout(function () { document.addEventListener('click', function f() { m.remove(); document.removeEventListener('click', f); }); }, 0);
+      });
+      return b;
+    };
+    var section = function (key, label, items, tool) {
       var off = !!S.open['s-' + key];
       var head = h('button', { class: 'shead', type: 'button' }, h('span', { text: label }), h('span', { class: 'ch' + (off ? '' : ' open') }, icon('down')));
       var box = h('div', { class: 'sitems', 'data-zone': key }); box.hidden = off;
@@ -968,7 +990,7 @@
         S.open['s-' + key] = !S.open['s-' + key]; save();
         box.hidden = !!S.open['s-' + key]; head.lastChild.classList.toggle('open', !S.open['s-' + key]);
       });
-      return [head, box];
+      return [tool ? h('div', { class: 'shrow' }, head, tool) : head, box];
     };
     var fill = function () {
       var q = input.value.trim().toLowerCase();
@@ -996,7 +1018,7 @@
         });
         if (projs.length) add(section('proj', 'проекты', projs));
         var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(bySide);
-        if (rest.length || (projs.length && S.chats.length)) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); })));
+        if (rest.length || (projs.length && S.chats.length)) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); }), sortTool()));
         else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'пока нет чатов. напиши первый вопрос.' }));
       }
       var nm = (S.settings.name || '').trim();
