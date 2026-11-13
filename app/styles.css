@@ -974,21 +974,31 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
 
 /* сессии */
 .sess { border-radius: 20px; background: var(--bg2); border: 1px solid var(--line); padding: 4px 8px 8px; margin-bottom: 4px; }
-.srow { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 32px; gap: 10px; align-items: center; padding: 11px 8px; border-top: 1px solid var(--line); font-size: 13.5px; }
-.srow:first-child { border-top: 0; }
-.srow.shead { font-size: 12.5px; font-weight: 600; color: var(--mute); }
-.srow .sd { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.srow .sd b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.srow .sm { color: var(--silver); font-size: 13px; }
-.srow .now { font-style: normal; font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: rgb(var(--w) / .12); color: var(--ink); }
-.sx { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--mute); }
-.sx svg.i { width: 16px; height: 16px; }
-@media (hover: hover) { .sx:hover { background: rgb(var(--w) / .1); color: var(--err); } }
+.ssr { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 32px; gap: 10px; align-items: center; padding: 11px 8px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.ssr:first-child { border-top: 0; }
+.ssr.sshead { font-size: 12.5px; font-weight: 600; color: var(--mute); }
+.ssr .sd { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.ssr .sd b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ssr .sm { color: var(--silver); font-size: 13px; }
+.ssr .now { font-style: normal; font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: rgb(var(--w) / .12); color: var(--ink); }
+.sess-x { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--mute); }
+.sess-x svg.i { width: 16px; height: 16px; }
+@media (hover: hover) { .sess-x:hover { background: rgb(var(--w) / .1); color: var(--err); } }
 .sfoot2 { display: flex; justify-content: flex-end; padding: 8px 8px 0; }
 @media (max-width: 640px) {
-  .srow { grid-template-columns: minmax(0, 1fr) 32px; gap: 2px 8px; }
-  .srow.shead { display: none; }
-  .srow .sd { grid-column: 1; } .srow .sx, .srow > span:last-child { grid-column: 2; grid-row: 1; }
-  .srow .sm { grid-column: 1 / -1; }
+  .ssr { grid-template-columns: minmax(0, 1fr) 32px; gap: 2px 8px; }
+  .ssr.sshead { display: none; }
+  .ssr .sd { grid-column: 1; } .ssr .sess-x, .ssr > span:last-child { grid-column: 2; grid-row: 1; }
+  .ssr .sm { grid-column: 1 / -1; }
 }
 .group.sw3 + .group { margin-top: 12px; }
+
+/* плашка «Память обновлена» над строкой ввода */
+.membar { display: flex; align-items: center; gap: 4px; margin: 0 8px; padding: 8px 6px 6px 8px; animation: rise .4s var(--ease) both; }
+.membar[hidden] { display: none; }
+.membar.out { opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; }
+.mem-t { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 14px 0 10px; border: 1px solid var(--line-top); border-radius: 99px; background: var(--card2); color: var(--ink); font-size: 14px; font-weight: 500; }
+.mem-t svg.i { width: 16px; height: 16px; color: var(--silver); }
+.membar .sk-x { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--mute); }
+.membar .sk-x svg.i { width: 15px; height: 15px; }
+.langs.one { grid-template-columns: 1fr; }

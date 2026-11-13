@@ -218,7 +218,7 @@
   function saveFile(name, text, mime) {
     try {
       var file = new File([text], name, { type: mime || 'text/plain' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
+      if (window.matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
     } catch (e0) { /* без File */ }
     var url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
     var a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
@@ -408,7 +408,7 @@
   function saveBlob(name, blob) {
     try {
       var file = new File([blob], name, { type: blob.type });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
+      if (window.matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
     } catch (e0) { /* без File */ }
     var url = URL.createObjectURL(blob), a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('Файл «' + name + '» сохранён');
@@ -433,6 +433,15 @@
     ['vi', 'Tiếng Việt', 'Vietnamese'], ['id', 'Indonesia', 'Indonesian'], ['ms', 'Melayu', 'Malay'], ['fil', 'Filipino', 'Filipino'], ['zh-CN', '中文（简体）', 'Chinese (Simplified)'],
     ['zh-TW', '中文（繁體）', 'Chinese (Traditional)'], ['ja', '日本語', 'Japanese'], ['ko', '한국어', 'Korean'], ['mn', 'Монгол', 'Mongolian']];
   function langOf(code) { return LANGS.filter(function (l) { return l[0] === code; })[0] || null; }
+  function openUiLang(back) {
+    var cur = window.I18N ? I18N.get() : 'ru';
+    var list = h('div', { class: 'langs one' }, Object.keys(I18N.langs).map(function (k) {
+      var b = h('button', { type: 'button', class: 'lang' + (k === cur ? ' on' : ''), 'data-notr': '1' }, h('b', { text: I18N.langs[k], raw: 1 }));
+      b.addEventListener('click', function () { if (k === cur) { back(); return; } I18N.set(k); });
+      return b;
+    }));
+    openSheet([backLink(back), h('h2', { text: 'Язык интерфейса' }), h('p', { class: 'cap', text: 'Язык кнопок и подсказок. Ответы ИИ зависят от языка твоих сообщений и от настройки «Язык ответов».' }), list]);
+  }
   function openLangPicker(back) {
     var q = field('input', { type: 'search', placeholder: 'Поиск языков', 'aria-label': 'поиск языков' }), grid = h('div', { class: 'langs' });
     var cur = S.settings.lang || 'auto';
@@ -1585,7 +1594,7 @@
   }
 
   var JOBS = ['Студент', 'Юрист', 'Разработчик', 'Дизайнер', 'Предприниматель', 'Учитель', 'Маркетолог', 'Менеджер', 'Бухгалтер', 'Инженер', 'Врач', 'Писатель', 'Исследователь', 'Другое'];
-  function dateRu(t) { return new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(' г.,', ' г.,'); }
+  function dateRu(t) { return new Date(t).toLocaleString(window.I18N ? I18N.locale() : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(' г.,', ' г.,'); }
   function openDelete() {
     var pw = field('input', { type: 'password', placeholder: 'Пароль', 'aria-label': 'пароль', autocomplete: 'current-password' });
     var err = h('p', { class: 'cap err', text: '' });
@@ -1618,7 +1627,7 @@
     job.addEventListener('change', function () { st.role = job.value; save(); });
     about.addEventListener('change', function () { st.about = about.value.trim(); save(); });
     var rowIn = function (title, desc, ctl) { return h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: title }), desc ? h('span', { text: desc }) : null), ctl); };
-    var when = lastSync ? new Date(lastSync).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'ещё не было';
+    var when = lastSync ? new Date(lastSync).toLocaleTimeString(window.I18N ? I18N.locale() : 'ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'ещё не было';
     var syncBtn = h('button', { class: 'btn block', type: 'button', text: 'Синхронизировать сейчас' });
     syncBtn.addEventListener('click', function () { syncBtn.disabled = true; syncBtn.textContent = 'синхронизирую…'; syncDown(false).then(function () { toast('Готово'); openAccount(); }); });
     var all = twice('Выйти на всех устройствах', 'Точно выйти везде? Нажми ещё раз', function () {
@@ -1633,10 +1642,10 @@
         sess.replaceChildren();
         var list = (x.j && x.j.sessions) || [];
         if (!x.ok || !list.length) { sess.append(h('p', { class: 'cap', text: 'Не получилось загрузить список' })); return; }
-        sess.append(h('div', { class: 'srow shead' }, h('span', { text: 'Устройство' }), h('span', { text: 'Местоположение' }), h('span', { text: 'Создано' }), h('span', { text: 'Обновлено' }), h('span')));
+        sess.append(h('div', { class: 'ssr sshead' }, h('span', { text: 'Устройство' }), h('span', { text: 'Местоположение' }), h('span', { text: 'Создано' }), h('span', { text: 'Обновлено' }), h('span')));
         list.forEach(function (s) {
-          var end = s.current ? h('span') : (function () { var b = h('button', { class: 'sx', type: 'button', 'aria-label': 'завершить сеанс', title: 'Завершить сеанс' }, icon('close')); b.addEventListener('click', function () { b.disabled = true; api('/auth/session-end', { id: s.id }).then(loadSess); }); return b; })();
-          sess.append(h('div', { class: 'srow' },
+          var end = s.current ? h('span') : (function () { var b = h('button', { class: 'sess-x', type: 'button', 'aria-label': 'завершить сеанс', title: 'Завершить сеанс' }, icon('close')); b.addEventListener('click', function () { b.disabled = true; api('/auth/session-end', { id: s.id }).then(loadSess); }); return b; })();
+          sess.append(h('div', { class: 'ssr' },
             h('span', { class: 'sd' }, h('b', { text: s.device, raw: 1 }), s.current ? h('i', { class: 'now', text: 'Текущий' }) : null),
             h('span', { class: 'sm', text: s.place || '—', raw: 1 }), h('span', { class: 'sm', text: dateRu(s.created) }), h('span', { class: 'sm', text: dateRu(s.last) }), end));
         });
@@ -1735,7 +1744,7 @@
       h('p', { class: 'glabel', text: 'Внешний вид' }),
       h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('palette'), h('span', { class: 'gl', text: 'Тема' }), seg)),
       h('p', { class: 'glabel', text: 'Язык' }),
-      h('div', { class: 'group' }, grow2('Язык ответов', 'chat', (langOf(S.settings.lang) ? langOf(S.settings.lang)[1] : 'Как в сообщении'), function () { openLangPicker(openGeneral); })),
+      h('div', { class: 'group' }, grow2('Язык интерфейса', 'gear', window.I18N ? I18N.langs[I18N.get()] : 'Русский', function () { openUiLang(openGeneral); }), grow2('Язык ответов', 'chat', (langOf(S.settings.lang) ? langOf(S.settings.lang)[1] : 'Как в сообщении'), function () { openLangPicker(openGeneral); })),
       h('p', { class: 'cap', text: 'На каком языке ИИ отвечает. По умолчанию он отвечает на том языке, на котором ты пишешь.' }),
       h('p', { class: 'foot', text: 'DDX AI ' + VERSION, raw: 1 })
     ], true);
