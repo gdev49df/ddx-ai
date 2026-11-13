@@ -1196,10 +1196,10 @@
     c.pinned = !c.pinned; save(); return true;
   }
   var PLANS = [
-    { id: 'free', name: 'free', price: 0, line: '20 сообщений в день' },
-    { id: 'pro', name: 'pro', price: 1090, limit: 300 },
-    { id: 'max', name: 'max', price: 5990, limit: 1500, badge: 'популярный', hot: true },
-    { id: 'ultra', name: 'ultra', price: 11990, limit: 5000, badge: 'выгодно' }
+    { id: 'free', name: 'free', price: 0, line: '10 сообщений в день' },
+    { id: 'pro', name: 'pro', price: 1090, limit: 1000 },
+    { id: 'max', name: 'max', price: 5990, limit: 3000, badge: 'популярный', hot: true },
+    { id: 'ultra', name: 'ultra', price: 11990, limit: 8000, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {

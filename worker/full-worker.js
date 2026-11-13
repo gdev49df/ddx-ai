@@ -655,8 +655,8 @@ export default {
       // если раньше вставлял старую версию этой вставки, замени её целиком на эту
       if (body.mode === 'chat' || body.mode === 'sub') {
         // тарифы: лимит сообщений в месяц; у годовой подписки лимит в 10 раз больше и считается на весь год
-        const PLANS = { pro: 300, max: 1500, ultra: 5000 };
-        const FREE_DAY = Number(env.CHAT_LIMIT || 20);
+        const PLANS = { pro: 1000, max: 3000, ultra: 8000 };
+        const FREE_DAY = Number(env.CHAT_LIMIT || 10);
         const device = String(body.device || '');
         if (env.KV && !/^[A-Za-z0-9-]{16,64}$/.test(device)) return reply(400, { error: 'device' }, origin);
         const day = dayKey(env);
