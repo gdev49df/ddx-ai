@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.1';
+  var VERSION = 'v2.1.1';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -381,6 +381,32 @@
     setTimeout(function () { if (!sheet.classList.contains('show')) sheet.hidden = true; }, 540);
   }
   sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
+  // свайп вниз закрывает шторку (телефон)
+  (function () {
+    var y0 = 0, dy = 0, t0 = 0, on = false, ok = false;
+    panel.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1 || window.innerWidth >= 900) return;
+      y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); on = true; ok = panel.scrollTop <= 0;
+    }, { passive: true });
+    panel.addEventListener('touchmove', function (e) {
+      if (!on) return;
+      var d = e.touches[0].clientY - y0;
+      if (!ok) { if (panel.scrollTop <= 0 && d > 0) { ok = true; y0 = e.touches[0].clientY; d = 0; } else return; }
+      if (d <= 0) { dy = 0; panel.style.transform = ''; return; }
+      dy = d; panel.style.transition = 'none'; panel.style.transform = 'translateY(' + d + 'px)';
+      sheet.style.opacity = String(Math.max(0, 1 - d / 500));
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    var end = function () {
+      if (!on) return; on = false;
+      var fast = dy > 40 && (Date.now() - t0) < 250;
+      panel.style.transition = ''; sheet.style.opacity = '';
+      if (dy > 110 || fast) { closeSheet(); setTimeout(function () { panel.style.transform = ''; }, 600); panel.style.transform = 'translateY(100%)'; }
+      else panel.style.transform = '';
+      dy = 0;
+    };
+    panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
+  })();
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeSheet(); closeView(); } });
 
   var toastTimer = 0;
