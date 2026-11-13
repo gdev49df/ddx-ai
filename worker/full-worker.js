@@ -684,7 +684,7 @@ export default {
 
     const raw = await req.text();
     // фото для улучшения весят больше обычных запросов
-    if (raw.length > (raw.indexOf('"image-up"') >= 0 ? 4000000 : 600000)) return reply(413, { error: 'too big' }, origin);
+    if (raw.length > 600000) return reply(413, { error: 'too big' }, origin);
     let body;
     try { body = JSON.parse(raw); } catch (e) { return reply(400, { error: 'json' }, origin); }
 
@@ -723,54 +723,6 @@ export default {
         refund = tq.refund;
         const answer = await llm(env, list(env.MODEL_ASK, ASK_MODELS), ASK_SYSTEM, 'Данные пользователя:\n' + ctx + '\n\nВопрос: ' + q, 700, false);
         return reply(200, { answer: answer, quota: tq.info ? tq.info() : null }, origin);
-      }
-
-      // вставка 2: положи прямо перед строкой  return reply(400, { error: 'mode' }, origin);
-      // если раньше вставлял старую версию этой вставки, замени её целиком на эту
-      // картинки через kie.ai: генерация (grok-imagine/text-to-image), улучшение (grok-imagine/upscale) и проверка задачи. нужен секрет KIE_API_KEY
-      if (body.mode === 'image' || body.mode === 'image-up' || body.mode === 'image-status') {
-        if (!env.KIE_API_KEY) return reply(500, { error: 'no kie', detail: 'в воркере нет секрета KIE_API_KEY' }, origin);
-        const kh = { 'content-type': 'application/json', 'authorization': 'Bearer ' + env.KIE_API_KEY };
-        const idRe = /^[A-Za-z0-9_-]{6,100}$/;
-        if (body.mode === 'image-status') {
-          const tid = String(body.taskId || '');
-          if (!idRe.test(tid)) return reply(400, { error: 'task' }, origin);
-          const sr = await fetch('https://api.kie.ai/api/v1/jobs/recordInfo?taskId=' + encodeURIComponent(tid), { headers: kh });
-          const sj = await sr.json().catch(() => ({}));
-          const d = sj.data || {};
-          let urls = [];
-          try { urls = (JSON.parse(d.resultJson || '{}').resultUrls || []).filter((u) => typeof u === 'string' && /^https:\/\//.test(u)).slice(0, 4); } catch (e) { urls = []; }
-          return reply(200, { state: String(d.state || ''), urls: urls, fail: String(d.failMsg || '').slice(0, 200) }, origin);
-        }
-        const idev = String(body.device || '');
-        if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(idev)) return reply(400, { error: 'device' }, origin);
-        if (!(await hit(env, 'img:' + (user ? 'u' + user.id : idev) + ':' + dayKey(env), Number(env.IMG_LIMIT || 10), 172800))) return reply(429, { error: 'limit', detail: 'на сегодня лимит картинок исчерпан' }, origin);
-        let kmodel, kinput;
-        if (body.mode === 'image') {
-          const prompt = String(body.prompt || '').trim().slice(0, 1500);
-          if (!prompt) return reply(400, { error: 'prompt' }, origin);
-          const aspect = ['1:1', '2:3', '3:2', '16:9', '9:16'].includes(String(body.aspect)) ? String(body.aspect) : '1:1';
-          kmodel = 'grok-imagine/text-to-image'; kinput = { prompt: prompt, aspect_ratio: aspect };
-        } else {
-          // улучшение: либо ссылка на картинку (уже созданную здесь), либо загруженное фото (data url), которое сначала кладём в хранилище kie
-          let srcUrl = String(body.url || '');
-          if (!/^https:\/\/[^\s]{4,600}$/.test(srcUrl)) srcUrl = '';
-          if (!srcUrl) {
-            const im = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(body.image || ''));
-            if (!im) return reply(400, { error: 'image' }, origin);
-            const ur = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', { method: 'POST', headers: kh, body: JSON.stringify({ base64Data: String(body.image), uploadPath: 'images/ddx-ai', fileName: 'photo-' + Date.now() + '.' + (im[1] === 'jpeg' ? 'jpg' : im[1]) }) });
-            const uj = await ur.json().catch(() => ({}));
-            srcUrl = uj && uj.data && uj.data.downloadUrl ? String(uj.data.downloadUrl) : '';
-            if (!srcUrl) return reply(502, { error: 'upstream', detail: 'kie (загрузка фото): ' + String(uj.msg || ur.status).slice(0, 160) }, origin);
-          }
-          // модель по умолчанию topaz/image-upscale; для recraft/crisp-upscale задай KIE_UPSCALE_MODEL
-          kmodel = String(env.KIE_UPSCALE_MODEL || 'topaz/image-upscale');
-          kinput = /recraft/.test(kmodel) ? { image: srcUrl } : { image_url: srcUrl, upscale_factor: String(env.KIE_UPSCALE_FACTOR || '2') };
-        }
-        const cr = await fetch('https://api.kie.ai/api/v1/jobs/createTask', { method: 'POST', headers: kh, body: JSON.stringify({ model: kmodel, input: kinput }) });
-        const cj = await cr.json().catch(() => ({}));
-        if (!cr.ok || cj.code !== 200 || !cj.data || !cj.data.taskId) return reply(502, { error: 'upstream', detail: 'kie: ' + String(cj.msg || cr.status).slice(0, 160) }, origin);
-        return reply(200, { taskId: String(cj.data.taskId) }, origin);
       }
 
       // распознавание речи для голосового ввода (whisper на groq); нужно, когда браузер сам не умеет (iPhone)

@@ -123,7 +123,6 @@
   function cleanMsgs(list) {
     return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
       .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [],
-        img: m.img && Array.isArray(m.img.urls) ? { urls: m.img.urls.filter(function (u) { return /^https:\/\//.test(u); }).slice(0, 1), task: String(m.img.task || '').slice(0, 100), up: !!m.img.up } : null,
         alts: Array.isArray(m.alts) ? m.alts.slice(0, 2).map(function (a) { return { text: String((a && a.text) || ''), src: Array.isArray(a && a.src) ? a.src : [], at: +(a && a.at) || 0 }; }) : null, vi: +m.vi === 1 ? 1 : 0,
         next: Array.isArray(m.next) ? m.next.slice(0, 3).map(function (x) { return String(x).slice(0, 80); }) : [] }; });
   }
@@ -158,7 +157,7 @@
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
         return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
-          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [], img: m.img || null }; }) };
+          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
       })
     });
   }
@@ -507,7 +506,6 @@
       if (m.text) { var eb = h('button', { class: 'medit', type: 'button', 'aria-label': 'изменить' }, icon('edit')); eb.addEventListener('click', function (e) { e.stopPropagation(); editMsg(m, el); }); el.append(eb); }
       if (fresh) el.classList.add('rise');
     } else {
-      if (m.img && m.img.urls && m.img.urls.length) return imgMsgEl(m, fresh);
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
       if (m.src && m.src.length) el.append(h('div', { class: 'srcs' }, h('span', { class: 'srcs-t', text: 'Источники' }), m.src.map(function (s, i) {
         var host = ''; try { host = new URL(s.u).hostname.replace(/^www\./, ''); } catch (eu) { host = s.u; }
@@ -702,86 +700,6 @@
     if (typeof armLimitNote === 'function') armLimitNote();
   }
 
-  /* ---------- картинки (kie.ai): создание и улучшение ---------- */
-  var lastReqImg = false;
-  var THINK_IMG = ['рисую…', 'подбираю цвета…', 'прорисовываю детали…', 'расставляю свет…', 'почти готово…'];
-  function aspectOf(q) {
-    q = String(q).toLowerCase();
-    if (/9:16|вертикальн|для сторис|stories|обои на телефон/.test(q)) return '9:16';
-    if (/16:9|широкоформат|горизонтальн|обои на компьютер|баннер/.test(q)) return '16:9';
-    if (/2:3|портрет/.test(q)) return '2:3';
-    if (/3:2/.test(q)) return '3:2';
-    return '1:1';
-  }
-  function kiePost(body) {
-    body.device = device;
-    return fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })
-      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); })
-      .then(function (x) {
-        if (x.ok) return x.j;
-        var j = x.j || {}, m;
-        if (x.st === 429) m = 'лимит картинок на сегодня исчерпан, завтра снова можно';
-        else if (j.error === 'mode') m = 'в воркере нет генерации картинок: задеплой worker/full-worker.js';
-        else if (j.error === 'no kie') m = 'в воркере нет секрета KIE_API_KEY: добавь его в настройках воркера';
-        else m = 'не получилось: ' + (j.detail || j.error || x.st);
-        throw new Error(m);
-      });
-  }
-  function kiePoll(taskId) {
-    return new Promise(function (res, rej) {
-      var n = 0;
-      (function tick() {
-        if (stopped) { var ab = new Error('stop'); ab.name = 'AbortError'; rej(ab); return; }
-        if (n++ > 70) { rej(new Error('картинка делается слишком долго, попробуй ещё раз')); return; }
-        kiePost({ mode: 'image-status', taskId: taskId }).then(function (j) {
-          if (j.state === 'success' && j.urls && j.urls.length) res(j.urls);
-          else if (j.state === 'fail') rej(new Error('не получилось нарисовать' + (j.fail ? ': ' + j.fail : '')));
-          else setTimeout(tick, 2500);
-        }, function (e) { if (n > 3) rej(e); else setTimeout(tick, 3000); });
-      })();
-    });
-  }
-  // ответ модели просит картинку ([[image: ...]]) или улучшение фото ([[upscale]]): делаем это и прикрепляем результат к этому же ответу
-  var pendingGen = null;
-  function genIntoMessage(g) {
-    var c = g.chat, m = g.msg, here = function () { return S.cur === c.id; };
-    busy = true; busyChat = c.id; stopped = false; syncSend(); clearError(); showSugg(); lastReqSearch = false; lastReqThink = false; lastReqImg = true; setThinking(true);
-    var start = g.photo ? kiePost({ mode: 'image-up', image: g.photo }) : kiePost({ mode: 'image', prompt: g.prompt, aspect: aspectOf(g.hint + ' ' + g.prompt) });
-    start.then(function (r) {
-      return kiePoll(r.taskId).then(function (urls) { return { task: r.taskId, urls: urls }; });
-    }).then(function (x) {
-      m.img = { urls: x.urls.slice(0, 1), task: x.task, up: !!g.photo, prompt: g.prompt || '' }; m.next = []; save();
-      if (here()) { setThinking(false); renderAll(); toBottom(true); }
-      else toast('картинка готова в чате «' + c.title + '»');
-    }).catch(function (e) {
-      if (here()) setThinking(false);
-      if (stopped) { toast('остановил'); return; }
-      toast(e && e.message ? e.message : 'не получилось создать картинку');
-    }).then(function () { busy = false; busyChat = null; stopped = false; syncSend(); showSugg(); });
-  }
-  function upscaleImage(m, btn) {
-    if (busy || !m.img || m.img.up) return;
-    busy = true; stopped = false; syncSend(); btn.disabled = true; btn.querySelector('span').textContent = 'Улучшаю…';
-    toast('Улучшаю картинку, это займёт до минуты');
-    kiePost({ mode: 'image-up', url: m.img.urls[0] }).then(function (r) { return kiePoll(r.taskId); }).then(function (urls) {
-      m.img.urls = urls.slice(0, 1); m.img.up = true; save(); renderAll(); toast('Готово, качество улучшено');
-    }).catch(function (e) {
-      if (!stopped) toast(e && e.message ? e.message : 'не получилось улучшить');
-      btn.disabled = false; btn.querySelector('span').textContent = 'Улучшить';
-    }).then(function () { busy = false; stopped = false; syncSend(); });
-  }
-  function imgMsgEl(m, fresh) {
-    var url = m.img.urls[0], el = h('div', { class: 'msg ai imgmsg' });
-    if (m.text && !/^\[(картинка|улучшенное)/.test(m.text)) el.append(mdBlock(m.text));
-    var im = h('img', { class: 'genimg', src: url, alt: 'картинка', loading: 'lazy' }); im.addEventListener('click', function () { viewPhoto(url); });
-    el.append(h('div', { class: 'genwrap' }, im));
-    var upb = h('button', { class: 'btn sm genup', type: 'button' }, icon('spark'), h('span', { text: m.img.up ? 'Улучшено' : 'Улучшить' }));
-    if (m.img.up) upb.disabled = true; else upb.addEventListener('click', function () { upscaleImage(m, upb); });
-    var dl = h('a', { class: 'btn sm', href: url, target: '_blank', rel: 'noopener noreferrer', download: 'ddx-ai-image.jpg' }, icon('download'), h('span', { text: 'Скачать' }));
-    el.append(h('div', { class: 'genbar' }, upb, dl));
-    if (fresh) el.classList.add('rise');
-    return el;
-  }
   var pendingAlt = null;
   function showSugg() {
     var bar = $('#sugg'), c = curChat(), m = c && c.msgs[c.msgs.length - 1];
@@ -800,8 +718,7 @@
     if (thinkEl) { thinkEl.remove(); thinkEl = null; }
     if (on) {
       var pool = THINK_WORDS.slice().sort(function () { return Math.random() - .5; });
-      if (busy && lastReqImg) pool = THINK_IMG.slice();
-      else if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
+      if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
       if (busy && lastReqThink) pool = THINK_DEEP.concat(pool.slice(0, 3));
       var i = 0, span = h('span', { text: pool[0] });
       thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), span);
@@ -2816,7 +2733,6 @@
   var reqCtl = null, stopped = false;
   function stopGen() { stopped = true; if (reqCtl) reqCtl.abort(); }
   function request() {
-    lastReqImg = false;
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
@@ -2844,8 +2760,7 @@
       if (here()) setThinking(false);
       if (x.ok && x.j.answer) {
         var ansText = String(x.j.answer);
-        var facts = [], ttl = '', genPrompt = '', wantUp = false;
-        if (S.settings.imgGen === true) ansText = ansText.replace(/\[\[\s*(?:image|img|картинка)\s*:\s*([^\]]{3,700}?)\s*\]\]/gi, function (_, v) { genPrompt = v.trim(); return ''; }).replace(/\[\[\s*(?:upscale|улучшить)\s*\]\]/gi, function () { wantUp = true; return ''; });
+        var facts = [], ttl = '';
         var nxt = [];
         ansText = ansText.replace(/\[\[\s*(title|название|memory|память|next|далее)\s*:\s*([^\]\n]{1,320}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
           v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
@@ -2866,13 +2781,6 @@
           m.alts = list;
         }
         pendingAlt = null;
-        if (genPrompt || wantUp) {
-          var lu = null; for (var gi = c.msgs.length - 1; gi >= 0; gi--) { if (c.msgs[gi].role === 'user') { lu = c.msgs[gi]; break; } }
-          var gphoto = wantUp && lu ? ((lu.big && lu.big[0]) || (lu.full && lu.full[0]) || '') : '';
-          if (genPrompt) pendingGen = { chat: c, msg: m, prompt: genPrompt, hint: lu ? lu.text : '' };
-          else if (gphoto) pendingGen = { chat: c, msg: m, photo: gphoto, prompt: '', hint: '' };
-          else toast('Чтобы улучшить фото, прикрепи его к сообщению');
-        }
         c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { setLeft(x.j); showLeft(); }
         if (here()) {
@@ -2903,7 +2811,7 @@
       if (stopped) { toast('остановил'); return; }
       var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
       if (here()) showError(msg); else toast(msg);
-    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); if (pendingGen) { var pg0 = pendingGen; pendingGen = null; genIntoMessage(pg0); } });
+    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); });
   }
 
   sendBtn.addEventListener('click', function () { if (busy) stopGen(); else send(); });

@@ -1144,11 +1144,6 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 
 .modelpop .mchk { width: 16px; height: 16px; flex: none; }
 /* сгенерированные картинки */
-.imgmsg .genwrap { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: var(--card2); max-width: min(100%, 420px); }
-.imgmsg .genimg { display: block; width: 100%; height: auto; cursor: zoom-in; animation: rise .5s var(--ease) both; }
-.genbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.genbar .btn.sm { min-height: 34px; padding: 0 14px; font-size: 13.5px; gap: 6px; text-decoration: none; }
-.genbar .btn[disabled] { opacity: .55; }
 .modelpop { width: min(330px, calc(100vw - 16px)); }
 .modelpop .sk-t em { white-space: normal; overflow: visible; text-overflow: clip; }
 .modelpop .mitem { padding: 10px 12px; }
