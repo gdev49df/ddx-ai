@@ -508,7 +508,7 @@ async function takeQuota(env, user, kind) {
 
 /* ---------- DDX AI: облачная копия чатов и привязка тарифа к аккаунту (хранится в KV) ---------- */
 // готовые коды активации (по 10 на тариф, на месяц). KV имеет приоритет: запись sub:КОД или просто КОД в KV переопределяет этот список
-const BUILTIN_CODES = {
+const AI_CODES = {
  "PRO-SVJ3-E3CP-WJVE": "pro",
  "PRO-KTSZ-SCP3-LRYM": "pro",
  "PRO-R3PJ-YHHA-MU4B": "pro",
@@ -544,7 +544,7 @@ async function codeInfo(env, code) {
   let raw = null;
   try { raw = JSON.parse(await env.KV.get('sub:' + code)); } catch (e) { raw = null; }
   if (!raw) { try { raw = JSON.parse(await env.KV.get(code)); } catch (e) { raw = null; } }
-  if (!raw && BUILTIN_CODES[code]) raw = { plan: BUILTIN_CODES[code], period: 'month' };
+  if (!raw && AI_CODES[code]) raw = { plan: AI_CODES[code], period: 'month' };
   return raw;
 }
 
