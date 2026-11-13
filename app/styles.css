@@ -598,3 +598,21 @@ mark.hl.cur { background: var(--paper); color: var(--on-paper); }
 .group:nth-of-type(2) { animation-delay: .05s; } .group:nth-of-type(3) { animation-delay: .1s; } .group:nth-of-type(4) { animation-delay: .15s; } .group:nth-of-type(5) { animation-delay: .2s; }
 .thinking .logo, .msg.ai.thinking svg { filter: drop-shadow(0 0 8px rgb(var(--w) / .25)); }
 .hero .mark { animation: sweep 6s ease-in-out infinite, rise .8s var(--ease) both; }
+
+/* ===== меню действий с чатом ===== */
+.popmenu { position: fixed; z-index: 50; min-width: 240px; padding: 6px; border-radius: 20px; background: var(--card2); border: 1px solid var(--line-top); box-shadow: 0 18px 50px rgba(0, 0, 0, .5); transform-origin: 100% 0; animation: popin .38s var(--spring) both; }
+.popmenu.out { animation: popout .18s ease both; }
+@keyframes popin { from { opacity: 0; transform: translateY(-6px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes popout { to { opacity: 0; transform: translateY(-4px) scale(.95); } }
+.pi { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius: 14px; background: none; color: var(--ink); font-size: 16px; font-weight: 500; text-align: left; transition: background .25s, transform .35s var(--spring); }
+.pi svg.i { width: 21px; height: 21px; flex: none; color: var(--silver); stroke-width: 1.7; }
+.pi:active { transform: scale(.97); background: rgb(var(--w) / .08); }
+.pi.danger, .pi.danger svg.i { color: var(--err); }
+.pi.armed { background: rgb(255 138 128 / .14); }
+.popmenu .pi { animation: rise .45s var(--ease) both; }
+.popmenu .pi:nth-child(2) { animation-delay: .03s; } .popmenu .pi:nth-child(3) { animation-delay: .06s; } .popmenu .pi:nth-child(4) { animation-delay: .09s; } .popmenu .pi:nth-child(5) { animation-delay: .12s; } .popmenu .pi:nth-child(7) { animation-delay: .16s; }
+.psep { display: block; height: 1px; margin: 5px 10px; background: var(--line); }
+#more.on { background: var(--card2); border-color: var(--line-top); }
+#more svg.i { transition: transform .4s var(--spring); }
+#more.on svg.i { transform: scale(1.12); }
+@media (hover: hover) { .pi:hover { background: rgb(var(--w) / .07); } .pi.danger:hover { background: rgb(255 138 128 / .12); } }

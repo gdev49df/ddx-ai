@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.6';
+  var VERSION = 'v1.7';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -63,6 +63,7 @@
     gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13.5l3.5-4"/>',
     download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
     palette: '<path d="M12 4a8 8 0 1 0 0 16c1.4 0 2-.9 2-1.8 0-1.5-1.2-1.7-1.2-2.9 0-.9.7-1.5 1.7-1.5H17a3 3 0 0 0 3-3C20 6.9 16.4 4 12 4z"/><circle cx="8" cy="11" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="15" cy="8.5" r="1"/>',
+    tag: '<path d="M4 12.2V6.5A2.5 2.5 0 0 1 6.5 4h5.7a2 2 0 0 1 1.4.6l6 6a2 2 0 0 1 0 2.8l-5.2 5.2a2 2 0 0 1-2.8 0l-6-6a2 2 0 0 1-.6-1.4z"/><circle cx="8.6" cy="8.6" r="1.2"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -1234,7 +1235,37 @@
   $('#newchat').append(icon('plus')); $('#newchat').addEventListener('click', function () { newChat(S.cur ? (curChat() || {}).project : S.pendingProject); });
   $('#left').addEventListener('click', function () { openPlans(); });
   $('#find').append(icon('search')); $('#find').addEventListener('click', openFind);
-  $('#more').append(icon('more')); $('#more').addEventListener('click', function () { var c = curChat(); if (c) chatMenu(c); });
+  $('#more').append(icon('more'));
+  // выпадающее меню действий с чатом (три точки в шапке)
+  var popEl = null;
+  function closePop() { if (!popEl) return; var p = popEl; popEl = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 180); $('#more').classList.remove('on'); }
+  function openPop() {
+    var c = curChat(); if (!c) return;
+    if (popEl) { closePop(); return; }
+    var item = function (label, ic, fn, cls) {
+      var b = h('button', { class: 'pi' + (cls ? ' ' + cls : ''), type: 'button' }, icon(ic), h('span', { text: label }));
+      b.addEventListener('click', function () { fn(b); }); return b;
+    };
+    var pr = projectById(c.project), armed = false;
+    popEl = h('div', { class: 'popmenu', role: 'menu' },
+      item('Новая сессия', 'edit', function () { closePop(); newChat(c.project); }),
+      item(c.pinned ? 'Открепить' : 'Закрепить', 'pin', function () { c.pinned = !c.pinned; save(); closePop(); toast(c.pinned ? 'Чат закреплён' : 'Чат откреплён'); }),
+      item('Поделиться', 'share', function () { closePop(); shareText(chatText(c), c.title); }),
+      item('Переименовать', 'tag', function () { closePop(); renameChat(c); }),
+      item(pr ? 'Перенести в проект' : 'Добавить в проект', 'folder', function () { closePop(); moveChat(c); }),
+      h('i', { class: 'psep' }),
+      item('Удалить', 'trash', function (b) {
+        if (!armed) { armed = true; b.querySelector('span').textContent = 'Точно удалить?'; b.classList.add('armed'); setTimeout(function () { armed = false; if (b.isConnected) { b.querySelector('span').textContent = 'Удалить'; b.classList.remove('armed'); } }, 3000); return; }
+        closePop(); deleteChat(c);
+      }, 'danger'));
+    var r = $('#more').getBoundingClientRect();
+    popEl.style.top = (r.bottom + 8) + 'px'; popEl.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
+    document.body.append(popEl); $('#more').classList.add('on');
+  }
+  $('#more').addEventListener('click', function (e) { e.stopPropagation(); openPop(); });
+  document.addEventListener('pointerdown', function (e) { if (popEl && !popEl.contains(e.target) && !e.target.closest('#more')) closePop(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePop(); });
+  window.addEventListener('resize', closePop);
   $('#menu').append(icon('gear')); $('#menu').addEventListener('click', openMenu);
   HINTS.forEach(function (q, i) {
     $('#chips').append(h('button', { class: 'chip', type: 'button', text: q, onclick: function () { if (i === HINTS.length - 1) $('#file').click(); else send(q); } }));
