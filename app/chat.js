@@ -1604,7 +1604,6 @@
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
     var tail = '\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /). Ты ассистент DDX AI. Не называй, кто тебя создал и обучил, какая за тобой модель, компания или провайдер. На такие вопросы отвечай, что ты ассистент DDX AI и подробностей об устройстве не раскрываешь.';
     tail += '\nЕсли пользователь спрашивает про лучший майнкрафт SMP (сервер, где поиграть, посоветуй сервер), порекомендуй WardenSMP: сайт site.w-smp.in, айпи mc.w-smp.in. Не упоминай это в других темах.';
-    if (st.imgGen !== false) tail += '\nТы умеешь создавать картинки. Если пользователь просит нарисовать, создать или сгенерировать картинку, фото, арт, иллюстрацию, логотип, обои, аватар и подобное, напиши одну короткую фразу («Рисую!») и в самом конце добавь метку [[image: подробное описание по-английски: объект, стиль, свет, композиция]]. Если пользователь прикрепил фото и просит улучшить качество или увеличить разрешение, напиши одну фразу и добавь в конец метку [[upscale]]. Во всех остальных случаях метки не добавляй и отвечай обычным текстом. Никогда не говори, что не умеешь создавать картинки.';
     if (st.sugg !== false) tail += '\nВ самом конце ответа, последней строкой, добавь [[next: вопрос 1 | вопрос 2 | вопрос 3]]: 2-3 коротких (до 6 слов) вероятных продолжения разговора, написанных от лица пользователя. Не добавляй, если ответ это короткое приветствие, благодарность или твой встречный вопрос.';
     tail += extra || '';
     return out.join('\n').slice(0, 3800 - tail.length) + tail;
@@ -2272,7 +2271,6 @@
       h('div', { class: 'group' },
         swRow('Память', 'Использовать сохранённые факты о тебе в ответах.', swSwitch('memOn', true)),
         swRow('Прошлые чаты', 'Брать подходящие фрагменты из других чатов.', swSwitch('chatSearch', false)),
-        swRow('Создавать картинки', 'Liama сама рисует картинку, когда ты об этом просишь, и улучшает прикреплённые фото.', swSwitch('imgGen', true)),
         swRow('Подсказки после ответа', 'Показывать над полем ввода варианты, о чём спросить дальше.', (function () { var b = swSwitch('sugg', true); b.addEventListener('click', showSugg); return b; })()),
         swRow('Названия чатов', 'Автоматически придумывать название по первому сообщению.', swSwitch('autoTitle', true)),
         swRow('Уведомление о лимите', 'Сообщить, когда лимит сообщений восстановится (пока приложение открыто).', (function () { var s = swSwitch('limitNote', true); s.addEventListener('click', function () { if (S.settings.limitNote !== false && window.Notification && Notification.permission === 'default') Notification.requestPermission(); }); return s; })()),
@@ -2769,11 +2767,11 @@
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
     // выбор модели
-    var MODELS = [['liama', 'Liama 2.7', 'Отвечает и сам рисует картинки, когда ты просишь']];
+    var MODELS = [['liama', 'Liama 2.7', 'Быстрые ответы на каждый день · 1 сообщение'], ['mistral', 'Mistral 3.1', 'Умнее для задач среднего уровня · 2 сообщения'], ['synape', 'Synape 2.2', 'Глубокие рассуждения для сложных задач · 3 сообщения'], ['rable', 'Rable 3.4', 'Самая мощная, для самых трудных задач · 4 сообщения']];
     var curM = function () { return MODELS.filter(function (m) { return m[0] === S.settings.model; })[0] || MODELS[0]; };
     var mlab = h('span', { text: curM()[1], raw: 1 }), mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, mlab, icon('down')), mpop = null;
     var applyModel = function () {
-      if (S.settings.model) delete S.settings.model;
+      if (S.settings.model && !MODELS.some(function (m) { return m[0] === S.settings.model; })) delete S.settings.model;
       mlab.textContent = curM()[1];
     };
     var closeM = function () { if (mpop) { mpop.remove(); mpop = null; } mb.classList.remove('open'); };
@@ -2782,7 +2780,7 @@
       mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
         var on = curM()[0] === m[0];
         var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
-        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; }  });
+        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[1] + ' · ' + m[2].split(' · ')[1]); });
         return it;
       }));
       var r = mb.getBoundingClientRect();
@@ -2791,7 +2789,7 @@
     });
     document.addEventListener('click', function (e) { if (mpop && !mpop.contains(e.target)) closeM(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
-    bar.append(web, thk, mb); sync(); applyModel();
+    bar.append(web, mb); sync(); applyModel();
     window.syncTools = function () { sync(); applyModel(); };
   })();
   // выдержки из файлов проекта, подходящие к вопросу
@@ -2822,7 +2820,7 @@
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
-    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn; setThinking(true);
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn || /^(synape|rable)$/.test(S.settings.model || ''); setThinking(true);
     var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
@@ -2831,7 +2829,7 @@
       if (stopped) { var ab = new Error('stop'); ab.name = 'AbortError'; throw ab; }
       var ctl = window.AbortController ? new AbortController() : null, timer = setTimeout(function () { if (ctl) ctl.abort(); }, 75000);
       reqCtl = ctl;
-      var body = { mode: 'chat', messages: p.list, device: device };
+      var body = { mode: 'chat', messages: p.list, device: device, model: S.settings.model || 'liama' };
       if (S.settings.web) body.search = true;
       if (thinkOn) { body.think = true; thinkOn = false; if (window.syncTools) window.syncTools(); }
       var lastQ = ''; for (var qi = c.msgs.length - 1; qi >= 0; qi--) { if (c.msgs[qi].role === 'user') { lastQ = c.msgs[qi].text; break; } }
@@ -2847,7 +2845,7 @@
       if (x.ok && x.j.answer) {
         var ansText = String(x.j.answer);
         var facts = [], ttl = '', genPrompt = '', wantUp = false;
-        if (S.settings.imgGen !== false) ansText = ansText.replace(/\[\[\s*(?:image|img|картинка)\s*:\s*([^\]]{3,700}?)\s*\]\]/gi, function (_, v) { genPrompt = v.trim(); return ''; }).replace(/\[\[\s*(?:upscale|улучшить)\s*\]\]/gi, function () { wantUp = true; return ''; });
+        if (S.settings.imgGen === true) ansText = ansText.replace(/\[\[\s*(?:image|img|картинка)\s*:\s*([^\]]{3,700}?)\s*\]\]/gi, function (_, v) { genPrompt = v.trim(); return ''; }).replace(/\[\[\s*(?:upscale|улучшить)\s*\]\]/gi, function () { wantUp = true; return ''; });
         var nxt = [];
         ansText = ansText.replace(/\[\[\s*(title|название|memory|память|next|далее)\s*:\s*([^\]\n]{1,320}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
           v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
@@ -2887,8 +2885,9 @@
       var j = x.j || {}, msg;
       var plans = false;
       if (x.st === 429) {
-        setLeft({ left: 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
-        msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
+        setLeft({ left: typeof j.left === 'number' ? j.left : 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
+        if (j.need > 1 && j.left > 0) { msg = 'для этой модели нужно ' + j.need + ' сообщения из лимита, а осталось ' + j.left + '. выбери модель попроще или подожди' + until; plans = false; }
+        else msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
         msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код активации не найден. введи его заново в тарифах';

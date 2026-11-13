@@ -120,3 +120,16 @@ plan: pro / max / ultra, period: month / year, exp: когда закончит�
 фото сначала загружается во временное хранилище kie (`kieai.redpandaai.co/api/file-base64-upload`, файлы живут 3 дня), потом уходит в upscale. `grok-imagine/upscale` не используется: он принимает только задачи видео.
 
 в воркере нужен секрет `KIE_API_KEY` с доступом к `grok-imagine/text-to-image` и к модели upscale. режимы воркера: `image`, `image-up` (поле `url` или `image` в виде data url), `image-status`. лимит `IMG_LIMIT` картинок в день на устройство или аккаунт (по умолчанию 10). инструкции пользователя теперь до 4000 символов.
+
+## линейка моделей
+
+в приложении четыре модели, воркер получает поле `model` (`liama`, `mistral`, `synape`, `rable`). каждая привязана к настоящей модели на groq, глубине рассуждений и цене в сообщениях лимита (таблица `TIERS` в воркере):
+
+| название | на groq | рассуждение | цена |
+|---|---|---|---|
+| Liama 2.7 | gpt-oss-20b | low | 1 |
+| Mistral 3.1 | gpt-oss-120b | medium | 2 |
+| Synape 2.2 | gpt-oss-120b (потом qwen3.8-27b) | high | 3 |
+| Rable 3.4 | groq/compound (потом gpt-oss-120b) | high | 4 |
+
+настоящую модель можно сменить переменной `MODEL_LIAMA`, `MODEL_MISTRAL`, `MODEL_SYNAPE` или `MODEL_RABLE` (через запятую, по порядку попыток). создание картинок через kie пока выключено в приложении, код воркера остался.

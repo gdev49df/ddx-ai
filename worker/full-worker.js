@@ -38,7 +38,7 @@ const list = (v, def) => (v ? String(v).split(',').map((x) => x.trim()).filter(B
 
 // вставка 1: положи сразу после строки  const list = (v, def) => ...
 // если раньше вставлял старую версию этой вставки, замени её целиком на эту
-const CHAT_MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant'];
+const CHAT_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
 const CHAT_SYSTEM = 'Ты DDX AI, дружелюбный помощник. Отвечай на любые вопросы по-русски (или на языке пользователя), коротко и по делу, если не попросили подробнее. '
   + 'Умеешь разбирать фото: описывать, читать текст, переводить, решать задачи со снимка. Если фото нет или оно не открылось, так и скажи. '
   + 'Можно использовать markdown: списки, **жирный**, `код`, блоки кода и простые таблицы. Не выдумывай факты: если не уверен, скажи об этом.';
@@ -67,7 +67,16 @@ async function webSearch(env, q) {
   return [];
 }
 
-const THINK_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'];
+const THINK_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
+
+// линейка моделей приложения: имя, настоящие модели на groq (пробуются по очереди), глубина рассуждений, цена в сообщениях лимита и потолок ответа.
+// заменить настоящую модель можно переменной MODEL_LIAMA / MODEL_MISTRAL / MODEL_SYNAPE / MODEL_RABLE (через запятую, по порядку попыток)
+const TIERS = {
+  liama:   { models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], effort: 'low', cost: 1, tokens: 1500, env: 'MODEL_LIAMA' },
+  mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 2500, env: 'MODEL_MISTRAL' },
+  synape:  { models: ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'], effort: 'high', cost: 3, tokens: 4000, env: 'MODEL_SYNAPE' },
+  rable:   { models: ['groq/compound', 'openai/gpt-oss-120b'], effort: 'high', cost: 4, tokens: 4500, env: 'MODEL_RABLE' }
+};
 
 async function chatLlm(env, models, messages, extra, opts) {
   opts = opts || {};
@@ -76,7 +85,7 @@ async function chatLlm(env, models, messages, extra, opts) {
   const system = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (extra ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + extra : '') + (opts.system ? '\n\n' + opts.system : '');
   for (const model of models) {
     const body = { model: model, max_tokens: opts.maxTokens || 1500, temperature: 0.6, messages: [{ role: 'system', content: system }].concat(messages) };
-    if (opts.think && /gpt-oss/.test(model)) body.reasoning_effort = 'high';
+    if (/gpt-oss/.test(model)) body.reasoning_effort = opts.effort || (opts.think ? 'high' : 'low');
     const r = await fetch(API, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + env.GROQ_API_KEY },
@@ -842,16 +851,21 @@ export default {
         const out = msgs.map((m, i) => (i === imgAt
           ? { role: 'user', content: [{ type: 'text', text: m.content || 'Что на этом фото?' }].concat(m.images.map((u) => ({ type: 'image_url', image_url: { url: u } }))) }
           : { role: m.role, content: m.content }));
+        // модель: liama, mistral, synape или rable; старый флаг think поднимает до synape
+        let tierId = TIERS[String(body.model)] ? String(body.model) : 'liama';
+        if (body.think && TIERS[tierId].cost < 3) tierId = 'synape';
+        const tier = TIERS[tierId];
+        const cost = vision ? 1 : tier.cost;
         let gk = null, g = 0;
         if (env.KV) {
-          if (used >= limit) return reply(429, { error: 'limit', plan: sub ? sub.plan : 'free', reset: slotAt(stamps, limit), full: fullAt(stamps) }, origin);
+          if (used + cost > limit) return reply(429, { error: 'limit', plan: sub ? sub.plan : 'free', need: cost, left: Math.max(0, limit - used), reset: slotAt(stamps, limit), full: fullAt(stamps) }, origin);
           gk = 'g:' + day;
           g = num(await env.KV.get(gk));
           if (g >= GLOBAL_DAY) return reply(503, { error: 'busy', detail: 'на сегодня общий лимит ии исчерпан, попробуй завтра' }, origin);
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
-        const think = !!body.think && !vision;
-        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : think ? list(env.MODEL_THINK, THINK_MODELS) : list(env.MODEL_CHAT, CHAT_MODELS);
+        const think = tier.cost >= 3 && !vision;
+        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env[tier.env], tier.models);
         // поиск в интернете: ищем по последнему вопросу и даём модели найденные выдержки
         let sources = [], sysExtra = '';
         if (body.search && !vision) {
@@ -864,11 +878,11 @@ export default {
         const ctx = String(body.context || '').slice(0, 9000);
         if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
-        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, maxTokens: think ? 3500 : 1500 });
-        const used2 = think ? 2 : 1;
-        if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(think ? [nowMs, nowMs] : [nowMs]).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, effort: tier.effort, maxTokens: tier.tokens });
+        const used2 = cost;
+        if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(Array(cost).fill(nowMs)).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {
-          answer: answer, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(think ? [nowMs, nowMs] : [nowMs]), limit), full: nowMs + WIN_MS,
+          answer: answer, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, model: tierId, cost: cost, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(Array(cost).fill(nowMs)), limit), full: nowMs + WIN_MS,
           plan: sub ? sub.plan : 'free', period: sub ? sub.period : 'day'
         }, origin);
       }

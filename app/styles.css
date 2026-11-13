@@ -1149,3 +1149,6 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .genbar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .genbar .btn.sm { min-height: 34px; padding: 0 14px; font-size: 13.5px; gap: 6px; text-decoration: none; }
 .genbar .btn[disabled] { opacity: .55; }
+.modelpop { width: min(330px, calc(100vw - 16px)); }
+.modelpop .sk-t em { white-space: normal; overflow: visible; text-overflow: clip; }
+.modelpop .mitem { padding: 10px 12px; }
