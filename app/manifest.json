@@ -1,6 +1,6 @@
 {
-  "name": "w chat",
-  "short_name": "w chat",
+  "name": "ИИ",
+  "short_name": "ИИ",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

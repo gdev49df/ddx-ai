@@ -1,4 +1,4 @@
-/* w chat: ии-чат с фото. работает через воркер ddx-ai (режим chat), ключ groq лежит только в воркере.
+/* ИИ: чат с фото. работает через воркер ddx-ai (режим chat), ключ groq лежит только в воркере.
    история хранится на телефоне; фото в истории остаются маленькими превью. */
 (function () {
   'use strict';
@@ -283,7 +283,7 @@
       h('div', { class: 'form' },
         h('p', { class: 'label', text: 'тема' }), seg,
         h('p', { class: 'label', text: 'чат' }), wipe),
-      h('p', { class: 'foot', text: 'w chat ' + VERSION + ' · Создано @bauyrzhanov_12_' })
+      h('p', { class: 'foot', text: 'ИИ ' + VERSION + ' · Создано @bauyrzhanov_12_' })
     ]);
   }
 
