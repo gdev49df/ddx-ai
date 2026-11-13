@@ -45,6 +45,9 @@
 
   var ICONS = {
     arrowup: '<path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+    doc: '<path d="M7 3.5h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M9 12.5h6M9 16h6"/>',
+    spark: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
     sort: '<path d="M4.5 7h15M7.5 12h9M10.5 17h3"/>',
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -1768,15 +1771,70 @@
       up
     ], true);
   }
+  function privText(title, paras) {
+    openSheet([backLink(openData), h('h2', { text: title })].concat(paras.map(function (t) { return h('p', { class: 'cap ptxt', text: t }); })), true);
+  }
+  function openFilesManage() {
+    var items = [], n = 0;
+    S.chats.forEach(function (c) { c.msgs.forEach(function (m) {
+      (m.files || []).forEach(function (f) { items.push([c.title, f.name, 'file']); });
+      (m.thumbs || []).forEach(function () { n++; });
+    }); });
+    var list = h('div', { class: 'group' });
+    if (!items.length && !n) list.append(h('p', { class: 'cap pad', text: 'Загруженных файлов и фото нет.' }));
+    items.slice(0, 60).forEach(function (x) { list.append(h('div', { class: 'grow' }, icon('file'), h('span', { class: 'gl', text: x[1], raw: 1 }), h('span', { class: 'gv', text: x[0], raw: 1 }))); });
+    if (n) list.append(h('div', { class: 'grow' }, icon('image'), h('span', { class: 'gl', text: 'Фото в чатах' }), h('span', { class: 'gv', text: String(n) })));
+    var del = twice('Удалить все вложения', 'Точно удалить? Нажми ещё раз', function () {
+      S.chats.forEach(function (c) { c.msgs.forEach(function (m) { m.files = []; m.thumbs = []; }); }); save(); toast('Вложения удалены'); openFilesManage();
+    }, 'danger');
+    openSheet([backLink(openData), h('h2', { text: 'Загруженные файлы' }), h('p', { class: 'cap', text: 'Файлы и фото хранятся только внутри чатов на этом устройстве (и в облачной копии, если ты вошёл в аккаунт). Сами сообщения останутся.' }), list].concat(items.length || n ? [h('div', { class: 'group solo' }, del)] : []), true);
+  }
+  function openFeedback() {
+    var up = 0, down = 0;
+    S.chats.forEach(function (c) { c.msgs.forEach(function (m) { if (m.fb === 'up') up++; else if (m.fb === 'down') down++; }); });
+    var reset = twice('Сбросить оценки', 'Точно сбросить? Нажми ещё раз', function () {
+      S.chats.forEach(function (c) { c.msgs.forEach(function (m) { m.fb = ''; }); }); save(); renderAll(); toast('Оценки сброшены'); openFeedback();
+    }, 'danger');
+    openSheet([backLink(openData), h('h2', { text: 'Ваши отзывы' }),
+      h('p', { class: 'cap', text: 'Оценки ответов («хороший» и «плохой») сохраняются только у тебя и никуда не отправляются.' }),
+      h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('thumbup'), h('span', { class: 'gl', text: 'Хороший ответ' }), h('span', { class: 'gv', text: String(up) })), h('div', { class: 'grow' }, icon('thumbdown'), h('span', { class: 'gl', text: 'Плохой ответ' }), h('span', { class: 'gv', text: String(down) }))),
+      up + down ? h('div', { class: 'group solo' }, reset) : null], true);
+  }
   function openData() {
     if (wide() && !paneHost) { openSettingsWin('data'); return; }
     var del = twice('Удалить все чаты', 'Точно удалить? Нажми ещё раз', function () {
       S.chats.forEach(function (c) { goneAdd(c.id); }); S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); toast('Чаты удалены');
     }, 'danger');
+    var act = function (label, text, fn, ext) {
+      var b = h('button', { class: 'btn', type: 'button' }, h('span', { text: text }), ext ? icon('share') : null); b.addEventListener('click', fn);
+      return h('div', { class: 'grow2 one' }, h('div', { class: 'gtxt' }, h('b', { text: label })), b);
+    };
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
-      h('h2', { text: 'Данные' }),
-      h('div', { class: 'group' }, grow2('Сохранить копию чатов', 'download', '', exportAll), grow2('Загрузить копию', 'share', '', function () { importInput.click(); })),
+      h('h2', { text: 'Конфиденциальность' }),
+      h('p', { class: 'cap ptxt', text: 'DDX AI хранит чаты, память и настройки на твоём устройстве. Если ты вошёл в аккаунт, их копия лежит в облаке. Подробнее о том, как мы работаем с данными, — ниже.' }),
+      h('div', { class: 'group' },
+        grow2('Как мы защищаем ваши данные', 'lock', '', function () { privText('Как мы защищаем ваши данные', [
+          'Чаты, память, Skills и настройки хранятся в памяти браузера на твоём устройстве. Без входа в аккаунт на наш сервер они не попадают.',
+          'Если ты вошёл в аккаунт, копия данных хранится в облаке и привязана к нему. Пароль хранится в виде хеша, а не открытым текстом.',
+          'Все запросы идут по защищённому соединению (HTTPS). Ключи сервиса ИИ хранятся только на сервере и в приложение не попадают.',
+          'Ты можешь в любой момент сохранить копию чатов в файл, завершить сессии на других устройствах или удалить аккаунт вместе с облачной копией.']); }),
+        grow2('Как мы используем ваши данные', 'doc', '', function () { privText('Как мы используем ваши данные', [
+          'Текст твоего сообщения, прикреплённые файлы и фото отправляются сервису ИИ только для того, чтобы получить ответ.',
+          'Память и инструкции добавляются к запросу, чтобы ответы подходили именно тебе. Выключить память можно ниже или в разделе «Память».',
+          'Мы не продаём данные, не показываем рекламу и не используем твои чаты для обучения моделей.',
+          'Счётчик сообщений в окне 12 часов привязан к аккаунту, коду активации или устройству. Содержимое чатов в нём не хранится.']); })),
+      h('h2', { class: 'ph2', text: 'Предпочтения' }),
+      h('div', { class: 'group' },
+        swRow('Использовать память', 'Добавлять сохранённые факты о тебе к ответам.', swSwitch('memOn', true)),
+        swRow('Учитывать прошлые чаты', 'Брать подходящие фрагменты из других чатов, когда это уместно.', swSwitch('chatSearch', false))),
+      h('h2', { class: 'ph2', text: 'Ваши данные' }),
+      h('div', { class: 'group' },
+        act('Экспортировать данные', 'Экспортировать данные', exportAll),
+        act('Загрузить копию', 'Загрузить', function () { importInput.click(); }),
+        act('Загруженные файлы', 'Управлять', openFilesManage),
+        act('Ваши отзывы', 'Управлять', openFeedback),
+        act('Настройки памяти', 'Управлять', function () { openMemory(); })),
       h('div', { class: 'group solo' }, del)
     ], true);
   }
@@ -1801,7 +1859,7 @@
   function openSettingsWin(sec) {
     swSec = sec || swSec || 'general';
     var secs = [['general', 'Общее', 'gear', openGeneral], ['account', 'Аккаунт', 'user', function () { if (acct) openAccount(); else openAuth('in'); }], ['pers', 'Персонализация', 'palette', openPersonal],
-      ['memory', 'Память', 'brain', openMemory], ['skills', 'Skills', 'bolt', openSkills], ['plans', 'Тарифы', 'star', function () { openPlans(); }], ['usage', 'Использование', 'gauge', openUsage], ['data', 'Данные', 'download', openData]];
+      ['caps', 'Возможности', 'spark', openCaps], ['memory', 'Память', 'brain', openMemory], ['skills', 'Skills', 'bolt', openSkills], ['plans', 'Тарифы', 'star', function () { openPlans(); }], ['usage', 'Использование', 'gauge', openUsage], ['data', 'Конфиденциальность', 'lock', openData]];
     var content = h('div', { class: 'sw-content' }), nav = h('div', { class: 'sw-nav' }), find = field('input', { type: 'search', placeholder: 'Поиск', 'aria-label': 'поиск по настройкам' });
     var btns = secs.map(function (x) {
       var b = h('button', { class: 'sw-item', type: 'button', 'data-k': x[0] }, icon(x[2]), h('span', { text: x[1] }));
@@ -1818,7 +1876,7 @@
     });
     var x = h('button', { class: 'round-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); x.addEventListener('click', closeSheet);
     nav.append(h('div', { class: 'sw-find' }, icon('search'), find), h('p', { class: 'glabel', text: 'Предпочтения' }));
-    btns.slice(0, 4).forEach(function (b) { nav.append(b); }); nav.append(h('p', { class: 'glabel', text: 'Приложение' })); btns.slice(4).forEach(function (b) { nav.append(b); });
+    btns.slice(0, 5).forEach(function (b) { nav.append(b); }); nav.append(h('p', { class: 'glabel', text: 'Приложение' })); btns.slice(5).forEach(function (b) { nav.append(b); });
     var win = h('div', { class: 'sw' }, h('div', { class: 'sw-head' }, h('h2', { text: 'Настройки' }), x), h('div', { class: 'sw-body' }, nav, content));
     paneHost = null; openSheet([win], false); panel.classList.add('swin');
     show(swSec);
@@ -1858,6 +1916,7 @@
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
       h('p', { class: 'glabel', text: 'Данные' }),
       h('div', { class: 'group' },
+        grow2('Конфиденциальность', 'lock', '', openData),
         grow2('Сохранить копию чатов', 'download', '', exportAll),
         grow2('Загрузить копию', 'share', '', function () { importInput.click(); })),
       h('div', { class: 'group solo' }, del),
@@ -1892,6 +1951,36 @@
     return b;
   }
   function swRow(title, desc, sw) { return h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: title }), h('span', { text: desc })), sw); }
+  function openCaps() {
+    if (wide() && !paneHost) { openSettingsWin('caps'); return; }
+    var st = S.settings;
+    var sel = function (opts, val, fn) {
+      var s = h('select', { class: 'sel' }); opts.forEach(function (o) { var op = h('option', { value: String(o[0]), text: o[1] }); if (String(o[0]) === String(val)) op.selected = true; s.append(op); });
+      s.addEventListener('change', function () { fn(s.value); save(); }); return s;
+    };
+    var hours = []; for (var i = 0; i < 24; i++) { var t = (i < 10 ? '0' : '') + i + ':00'; hours.push([t, t]); }
+    var breakSel = sel([[0, '—'], [30, '30 минут'], [60, '1 час'], [120, '2 часа'], [180, '3 часа']], st.breakMin || 0, function (v) { st.breakMin = +v; });
+    if (!st.quietDays) st.quietDays = [false, false, false, false, false, false, false];
+    var dn = ['В', 'П', 'В', 'С', 'Ч', 'П', 'С'], dt = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+    var days = h('div', { class: 'qdays' }, dn.map(function (n, i) {
+      var b = h('button', { class: 'qd' + (st.quietDays[i] ? ' on' : ''), type: 'button', text: n, title: dt[i], raw: 1 });
+      b.addEventListener('click', function () { st.quietDays[i] = !st.quietDays[i]; b.classList.toggle('on', st.quietDays[i]); save(); }); return b;
+    }));
+    var from = sel(hours, st.quietFrom || '22:00', function (v) { st.quietFrom = v; }), to = sel(hours, st.quietTo || '07:00', function (v) { st.quietTo = v; });
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Возможности' }),
+      h('div', { class: 'group' },
+        swRow('Память', 'Использовать сохранённые факты о тебе в ответах.', swSwitch('memOn', true)),
+        swRow('Прошлые чаты', 'Брать подходящие фрагменты из других чатов.', swSwitch('chatSearch', false)),
+        swRow('Названия чатов', 'Автоматически придумывать название по первому сообщению.', swSwitch('autoTitle', true)),
+        swRow('Отправка по Enter', 'На компьютере Enter отправляет, Shift+Enter — новая строка.', swSwitch('enterSend', true))),
+      h('h2', { class: 'ph2', text: 'Время и фокус' }),
+      h('div', { class: 'group' },
+        h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: 'Напоминания о перерывах' }), h('span', { text: 'Напомним сделать перерыв, если ты долго общаешься с ИИ. Можно отключить в любой момент.' })), breakSel),
+        h('div', { class: 'grow2 qrow' }, h('div', { class: 'gtxt' }, h('b', { text: 'Тихие часы' }), h('span', { text: 'Выбери дни и время, когда отправка сообщений отключена. Можно отменить или изменить в любой момент.' }), days, h('div', { class: 'qtime' }, h('span', { text: 'С' }), from, h('span', { text: 'до' }), to))))
+    ], true);
+  }
   function openMemory() {
     if (wide() && !paneHost) { openSettingsWin('memory'); return; }
     var st = S.settings, list = h('div', { class: 'group memlist' }), cnt = h('span', { class: 'fcnt' });
@@ -2249,10 +2338,28 @@
   }
   function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 148) + 'px'; measure(); }
 
+  /* время и фокус: тихие часы и напоминания о перерыве */
+  var lastSend = 0, sessAt = 0;
+  function tmin(s) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '')); return m ? (+m[1]) * 60 + (+m[2]) : 0; }
+  function quietNow() {
+    var st = S.settings, days = st.quietDays;
+    if (!days || !days.some(Boolean)) return false;
+    var d = new Date(), t = d.getHours() * 60 + d.getMinutes(), a = tmin(st.quietFrom || '22:00'), b = tmin(st.quietTo || '07:00'), dow = d.getDay();
+    if (a === b) return false;
+    if (a < b) return !!days[dow] && t >= a && t < b;
+    return (!!days[dow] && t >= a) || (!!days[(dow + 6) % 7] && t < b);
+  }
+  setInterval(function () {
+    var m = +S.settings.breakMin || 0, now = Date.now();
+    if (lastSend && now - lastSend > 10 * 60000) { sessAt = 0; lastSend = 0; }
+    if (m > 0 && sessAt && now - sessAt >= m * 60000) { sessAt = now; toast('Пора сделать перерыв: ты общаешься уже ' + (m >= 60 ? (m / 60) + ' ч' : m + ' мин')); }
+  }, 30000);
   function send(text) {
     if (busy || loading) return;
     text = String(text == null ? ta.value : text).trim();
     if (!text && !atts.length) return;
+    if (quietNow()) { toast('Тихие часы: отправка отключена до ' + (S.settings.quietTo || '07:00')); return; }
+    lastSend = Date.now(); if (!sessAt) sessAt = lastSend;
     clearError();
     var mm = /^\s*запомни(?:те)?[,:]?\s+(?:что\s+)?([\s\S]{3,200})$/i.exec(text);
     if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
@@ -2315,7 +2422,7 @@
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
     busy = true; busyChat = c.id; syncSend(); clearError(); setThinking(true);
-    var wantTitle = c.msgs.length === 1, memOn = S.settings.memOn !== false;
+    var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
     fitImages(p.images).then(function (imgs) {
@@ -2380,7 +2487,7 @@
   var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   ta.addEventListener('keydown', function (e) {
     // на компьютере enter отправляет, shift+enter новая строка; на телефоне enter это новая строка
-    if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.isComposing) { e.preventDefault(); send(); }
+    if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.isComposing && S.settings.enterSend !== false) { e.preventDefault(); send(); }
   });
 
   /* ---------- кнопка «вниз» ---------- */
