@@ -1,6 +1,6 @@
 {
-  "name": "ИИ",
-  "short_name": "ИИ",
+  "name": "DDX AI",
+  "short_name": "DDX AI",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
