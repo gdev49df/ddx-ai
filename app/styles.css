@@ -1147,3 +1147,14 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .modelpop { width: min(330px, calc(100vw - 16px)); }
 .modelpop .sk-t em { white-space: normal; overflow: visible; text-overflow: clip; }
 .modelpop .mitem { padding: 10px 12px; }
+
+/* приветствие: мягкое свечение за логотипом и градиентный текст */
+.hero-logo { position: relative; width: 132px; height: 132px; }
+.hero-logo::before { content: ''; position: absolute; inset: -34px; border-radius: 50%; background: radial-gradient(closest-side, rgb(var(--w) / .16), rgb(var(--w) / .05) 55%, transparent 75%); animation: heroglow 5s ease-in-out infinite; pointer-events: none; }
+.hero-logo::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgb(var(--w) / .10); box-shadow: inset 0 0 28px rgb(var(--w) / .05); pointer-events: none; }
+svg.logo.herologo { position: relative; z-index: 1; width: 74px; height: 74px; filter: drop-shadow(0 4px 18px rgb(var(--w) / .22)); }
+.hero { gap: 30px; }
+.hero-greet { font-size: clamp(28px, 8vw, 38px); font-weight: 750; letter-spacing: -.03em; color: var(--ink); }
+.hero-greet .cw { padding-bottom: .08em; background: linear-gradient(180deg, var(--ink) 40%, rgb(var(--w) / .6)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+@keyframes heroglow { 0%, 100% { opacity: .65; transform: scale(.94); } 50% { opacity: 1; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .hero-logo::before { animation: none; } }
