@@ -910,3 +910,18 @@ body { overflow-x: clip; }
 }
 .group.stack { padding: 8px; background: none; border: 0; box-shadow: none; }
 .cap.err { color: #ff8a8a; min-height: 1.2em; margin: 8px 4px; }
+
+/* использование */
+.sheet h2 .utag { margin-left: 10px; padding: 3px 10px; border-radius: 99px; background: rgb(var(--w) / .1); font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--silver); vertical-align: middle; }
+.ustat { margin: 10px 0 14px; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.ugroup { display: grid; gap: 18px; padding: 16px 18px; border-radius: 20px; background: var(--bg2); border: 1px solid var(--line); animation: rise .5s var(--ease) both; }
+.urow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; }
+.urow .ul { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.urow .ul b { font-size: 15px; font-weight: 600; }
+.urow .ul span { font-size: 12.5px; color: var(--mute); }
+.urow .ubar { grid-column: 1; }
+.urow .ur { grid-column: 2; font-style: normal; font-size: 13px; color: var(--silver); text-align: right; white-space: nowrap; }
+.ubar { height: 8px; border-radius: 99px; background: rgb(var(--w) / .1); overflow: hidden; }
+.ubar i { display: block; height: 100%; border-radius: 99px; background: var(--ink); transform-origin: left; animation: ugrow .7s var(--ease) both; }
+.ubar.warn i { background: #ff9d5c; }
+@keyframes ugrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }

@@ -1511,25 +1511,40 @@
   /* ---------- окно настроек на компьютере: слева разделы, справа содержимое ---------- */
   var swSec = 'general';
   function openUsage() {
-    var L = lim(), big = function (n) { return n >= 1e9 ? '∞' : String(n); };
+    var L = lim(), big = function (n) { return n >= 1e9; };
     var planName = sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free';
-    var left = lastLeft ? lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') : 'после первого сообщения';
+    var used = null, total = lastLeft && lastLeft.limit ? lastLeft.limit : 0;
+    if (total) used = Math.max(0, Math.min(total, total - lastLeft.left));
+    var pct = total ? Math.round(used / total * 100) : 0;
+    var MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    var reset;
+    if (!sub) reset = 'Сброс каждый день в 00:00';
+    else if (sub.period === 'year') reset = sub.exp ? 'Действует до ' + new Date(sub.exp).getDate() + ' ' + MON[new Date(sub.exp).getMonth()] : 'Лимит на весь год';
+    else { var nx = new Date(); nx = new Date(nx.getFullYear(), nx.getMonth() + 1, 1); reset = 'Сброс 1 ' + MON[nx.getMonth()]; }
+    var status = !total ? 'Данные появятся после первого сообщения.' : pct >= 100 ? 'Лимит исчерпан. Он обновится после сброса, или можно перейти на тариф выше.' : pct >= 80 ? 'Лимит почти исчерпан. Запаса хватит ненадолго.' : 'Всё идёт по плану. К сбросу у тебя ещё должен остаться запас.';
+    var bar = function (p, warn) { return h('div', { class: 'ubar' + (warn ? ' warn' : '') }, h('i', { style: 'width:' + Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%' })); };
+    var row = function (title, sub2, p, right, warn) {
+      return h('div', { class: 'urow' }, h('div', { class: 'ul' }, h('b', { text: title }), sub2 ? h('span', { text: sub2 }) : null), bar(p, warn), h('em', { class: 'ur', text: right }));
+    };
+    var lim2 = function (title, now, max) { var inf = big(max); return row(title, '', inf ? 0 : Math.round(now / max * 100), inf ? now + ' · без ограничений' : now + ' из ' + max, !inf && now >= max); };
+    var pinned = S.chats.filter(function (x) { return x.pinned; }).length;
     var up = h('button', { class: 'btn solid block', type: 'button', text: sub ? 'Сменить тариф' : 'Улучшить тариф' }); up.addEventListener('click', function () { openPlans(); });
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
-      h('h2', { text: 'Использование' }),
+      h('h2', {}, h('span', { text: 'Твоё использование' }), h('span', { class: 'utag', text: planName })),
+      h('p', { class: 'ustat', text: status }),
+      h('div', { class: 'ugroup' },
+        row(sub ? 'Сообщения' : 'Сегодня', reset, pct, total ? 'Использовано ' + pct + '%' : '—', pct >= 80)),
+      h('p', { class: 'glabel', text: 'Лимиты тарифа' }),
+      h('div', { class: 'ugroup' },
+        lim2('Проекты', S.projects.length, L.projects),
+        lim2('Закреплённые чаты', pinned, L.pins),
+        lim2('Записи в памяти', ((S.settings.memory || []).length), L.memory),
+        lim2('Skills', ((S.settings.skills || []).length), L.skills)),
+      h('p', { class: 'glabel', text: 'В одном сообщении' }),
       h('div', { class: 'group' },
-        grow2('Тариф', 'star', planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : ''), null),
-        grow2('Сообщений осталось', 'gauge', left, null)),
-      h('p', { class: 'glabel', text: 'Что даёт тариф' }),
-      h('div', { class: 'group' },
-        grow2('Фото в сообщении', 'image', String(L.photos), null),
-        grow2('Файлы в сообщении', 'file', String(L.files), null),
-        grow2('Символов из файла', 'file', money(L.chars), null),
-        grow2('Проекты', 'folder', big(L.projects), null),
-        grow2('Закреплённые чаты', 'pin', big(L.pins), null),
-        grow2('Записей в памяти', 'brain', big(L.memory), null),
-        grow2('Skills', 'bolt', big(L.skills), null)),
+        grow2('Фото', 'image', 'до ' + L.photos, null),
+        grow2('Файлы', 'file', 'до ' + L.files + ' по ' + money(L.chars) + ' символов', null)),
       up
     ], true);
   }
