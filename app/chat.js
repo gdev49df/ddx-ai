@@ -1250,7 +1250,7 @@
           featureRows(p.id),
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
           year && p.price ? h('p', { class: 'plan-save', text: '2 месяца в подарок' }) : null,
-          p.price ? (cur ? h('span', { class: 'btn block buy now', text: 'Твой тариф' }) : h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить в WhatsApp' })) : null);
+          p.price ? (cur ? h('span', { class: 'btn block buy now', text: 'Твой тариф' }) : h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Перейти на ' + p.name })) : null);
       });
       plansBox.replaceChildren.apply(plansBox, made);
       made.forEach(function (card) { var b = card.querySelector('.plan-p b'); if (b) countUp(b); });
