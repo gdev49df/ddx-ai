@@ -776,7 +776,7 @@ body.sdrag, body.sdrag * { cursor: grabbing !important; }
 .seg3 button.on { background: var(--bg2); color: var(--ink); box-shadow: 0 0 0 1px var(--line-top); }
 @keyframes swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (min-width: 900px) {
-  .sheet-panel.swin { max-width: 980px; width: min(94vw, 980px); height: min(82dvh, 720px); padding: 0; overflow: hidden; display: flex; }
+  .sheet-panel.swin { max-width: 1240px; width: min(94vw, 1240px); height: min(86dvh, 800px); padding: 0; overflow: hidden; display: flex; }
   .sw { display: grid; grid-template-rows: auto 1fr; width: 100%; min-height: 0; }
   .sw-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 14px 24px; border-bottom: 1px solid var(--line); }
   .sw-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
