@@ -58,7 +58,7 @@ button { cursor: pointer; }
 .bar {
   position: sticky; top: 0; z-index: 12; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin: 0 -12px; padding: calc(env(safe-area-inset-top) + 14px) 18px 14px;
-  background: linear-gradient(180deg, var(--bg) 74%, transparent);
+  background: linear-gradient(180deg, var(--bg) 90%, transparent);
 }
 .bar { gap: 10px; }
 .bar .brand { flex: 1; min-width: 0; padding-left: 4px; }
