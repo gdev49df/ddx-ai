@@ -5,8 +5,8 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.1';
-  var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left';
+  var VERSION = 'v1.2';
+  var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
   var HINTS = ['объясни, как работает инфляция', 'идея подарка до 10 000 ₸', 'план тренировок на неделю', 'что на фото? прикрепи снимок'];
@@ -48,6 +48,7 @@
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>',
     list: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     chat: '<path d="M5 6.5a2.5 2.5 0 0 1 2.5-2.5h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16h-.5A2.5 2.5 0 0 1 5 13.5z"/>',
+    star: '<path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.3 7.2 18.9l1-5.4-4-3.8 5.4-.7z"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -83,7 +84,7 @@
   /* ---------- состояние ---------- */
   // S.chats: чаты, S.projects: папки с общим контекстом, S.cur: открытый чат (null: новый, ещё не создан)
   var S = { chats: [], projects: [], cur: null, pendingProject: null, open: {}, settings: { name: '', about: '', style: 'normal', extra: '' } };
-  var atts = [], busy = false, busyChat = null, thinkEl = null, errEl = null, lastLeft = null;
+  var atts = [], busy = false, busyChat = null, thinkEl = null, errEl = null, lastLeft = null, subCode = '', sub = null;
   var device = ls.get(KEY_DEV);
   if (!device) { device = (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); ls.set(KEY_DEV, device); }
 
@@ -117,7 +118,9 @@
         S.chats = [c0]; S.cur = c0.id;
       }
     }
-    try { var l = JSON.parse(ls.get(KEY_LEFT) || 'null'); if (l && l.day === dayStr()) lastLeft = l; } catch (e3) { /* нет данных */ }
+    try { var l = JSON.parse(ls.get(KEY_LEFT) || 'null'); if (l && (l.day === dayStr() || (l.plan && l.plan !== 'free'))) lastLeft = l; } catch (e3) { /* нет данных */ }
+    subCode = ls.get(KEY_CODE) || '';
+    try { sub = subCode ? JSON.parse(ls.get(KEY_SUB) || 'null') : null; } catch (e4) { sub = null; }
   }
   function pack(stripThumbs) {
     return JSON.stringify({
@@ -273,7 +276,8 @@
     var el = $('#left');
     if (!lastLeft) { el.hidden = true; return; }
     el.hidden = false;
-    el.textContent = 'сообщений на сегодня: осталось ' + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '');
+    var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
+    el.textContent = (paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений на сегодня: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (paid ? (sub.period === 'year' ? ' на год' : ' в этом месяце') : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
   }
 
@@ -287,10 +291,12 @@
     showHero();
   }
   function clearError() { if (errEl) { errEl.remove(); errEl = null; } }
-  function showError(text) {
+  function showError(text, plans) {
     clearError();
     errEl = h('div', { class: 'msg err rise' }, h('p', { text: text }),
-      h('button', { class: 'btn', type: 'button', onclick: function () { if (!busy) request(); } }, h('span', { text: 'повторить' })));
+      h('div', { class: 'err-btns' },
+        h('button', { class: 'btn', type: 'button', onclick: function () { if (!busy) request(); } }, h('span', { text: 'повторить' })),
+        plans ? h('button', { class: 'btn solid', type: 'button', onclick: openPlans }, h('span', { text: 'тарифы' })) : null));
     chat.append(errEl);
     toBottom(true);
   }
@@ -395,7 +401,7 @@
   var sideUI = null;
   function refreshSide() { if (sideUI) sideUI.fill(); }
   // после действия над чатом: на телефоне вернуться к списку, на компьютере закрыть окно (список слева уже виден)
-  function listsHome() { if (wide()) { closeSheet(); refreshSide(); } else openChats(); }
+  function listsHome() { closeSheet(); refreshSide(); }
 
   function listUI() {
     var list = h('div', { class: 'stack' });
@@ -429,26 +435,67 @@
       search: h('div', { class: 'searchbox' }, input)
     };
   }
-  function openChats() {
-    var u = listUI();
-    openSheet([h('h2', { text: 'чаты' }), u.top, u.search, u.list], true);
+  function openChats() { if (wide()) { if (sideUI) sideUI.show(); } else setDrawer(true); }
+  // постоянная панель слева на широком экране (на телефоне это выезжающая панель): плоский список как в claude
+
+  /* ---------- выезжающая панель на телефоне ---------- */
+  var scrimEl = h('div', { class: 'scrim' });
+  document.body.append(scrimEl);
+  function setDrawer(open) {
+    var side = $('#side');
+    side.classList.remove('drag'); scrimEl.classList.remove('drag');
+    side.style.transform = ''; side.style.visibility = ''; scrimEl.style.opacity = '';
+    side.classList.toggle('open', !!open && !wide()); scrimEl.classList.toggle('show', !!open && !wide());
   }
-  // постоянная панель слева на широком экране: плоский список как в claude
+  scrimEl.addEventListener('click', function () { setDrawer(false); });
+  (function swipe() {
+    var side = $('#side'), x0 = 0, y0 = 0, t0 = 0, start = null, mode = null, last = 0, W = 320;
+    var clamp = function (v) { return Math.max(0, Math.min(W, v)); };
+    document.addEventListener('touchstart', function (e) {
+      mode = null; start = null;
+      if (wide() || e.touches.length > 1 || !sheet.hidden) return;
+      var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); W = side.offsetWidth || 320;
+      if (side.classList.contains('open')) start = 'close';
+      else if (!e.target.closest || !e.target.closest('pre, table, textarea, input, .atts, .pics')) start = 'open';
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!start) return;
+      var t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      if (!mode) {
+        if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start = null; return; }
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (start === 'open' && dx > 0) mode = 'open'; else if (start === 'close' && dx < 0) mode = 'close'; else { start = null; return; }
+          side.classList.add('drag'); scrimEl.classList.add('drag'); scrimEl.classList.add('show');
+        } else return;
+      }
+      last = clamp(mode === 'open' ? dx : W + dx);
+      side.style.visibility = 'visible'; side.style.transform = 'translateX(' + (last - W) + 'px)'; scrimEl.style.opacity = String(last / W);
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    var end = function () {
+      if (!mode) return;
+      var fast = Date.now() - t0 < 280, dir = mode;
+      var open = fast ? dir === 'open' : last > W * 0.45;
+      mode = null; start = null; setDrawer(open);
+    };
+    document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
+  })();
+
   function buildSide() {
     var side = $('#side');
     var input = field('input', { type: 'search', placeholder: 'поиск по чатам', 'aria-label': 'поиск', enterkeyhint: 'search' });
     var searchBox = h('div', { class: 'ssearch' }, input); searchBox.hidden = true;
     var body = h('div', { class: 'sbody' });
     var foot = h('div', { class: 'sfoot' });
-    var nav = function (ic, label, fn) {
-      var b = h('button', { class: 'snav', type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', fn); return b;
+    var nav = function (ic, label, fn, cls) {
+      var b = h('button', { class: 'snav' + (cls ? ' ' + cls : ''), type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', fn); return b;
     };
     var showSearch = function () { searchBox.hidden = false; input.focus(); input.select(); };
     var srow = function (c, pin) {
       var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
       more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
       var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title }));
-      main.addEventListener('click', function () { openChat(c.id); closeSheet(); });
+      main.addEventListener('click', function () { openChat(c.id); closeSheet(); setDrawer(false); });
       return h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : '') }, main, more);
     };
     var section = function (key, label, items) {
@@ -478,7 +525,7 @@
           var chats = S.chats.filter(function (c) { return c.project === p.id; }).sort(byUpdated);
           var kids = h('div', { class: 'skids' }); kids.hidden = !S.open[p.id];
           chats.forEach(function (c) { kids.append(srow(c, false)); });
-          kids.append(h('button', { class: 'snew', type: 'button', text: '+ чат в проекте', onclick: function () { newChat(p.id); closeSheet(); } }));
+          kids.append(h('button', { class: 'snew', type: 'button', text: '+ чат в проекте', onclick: function () { newChat(p.id); closeSheet(); setDrawer(false); } }));
           var ch = h('span', { class: 'ch' + (S.open[p.id] ? ' open' : '') }, icon('down'));
           var main = h('button', { class: 'srow-main', type: 'button' }, icon('folder'), h('span', { text: p.name }), ch);
           main.addEventListener('click', function () { S.open[p.id] = !S.open[p.id]; save(); kids.hidden = !S.open[p.id]; ch.classList.toggle('open', !!S.open[p.id]); });
@@ -494,18 +541,21 @@
       var nm = (S.settings.name || '').trim();
       foot.replaceChildren(
         h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
-        h('span', { class: 'sname', text: nm || 'DDX AI' }),
-        (function () { var g = h('button', { class: 'srow-more on', type: 'button', 'aria-label': 'меню' }, icon('gear')); g.addEventListener('click', openMenu); return g; })());
+        h('span', { class: 'sname', text: nm || 'DDX AI' }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''),
+        h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })),
+        (function () { var g = h('button', { class: 'srow-more on', type: 'button', 'aria-label': 'меню' }, icon('gear')); g.addEventListener('click', function () { setDrawer(false); openMenu(); }); return g; })());
     };
     input.addEventListener('input', fill);
     input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; searchBox.hidden = true; fill(); } });
     side.append(
-      h('div', { class: 'side-brand' }, logo('logo'), h('span', { text: 'DDX AI' })),
+      h('div', { class: 'side-brand' }, logo('logo'), h('span', { text: 'DDX AI' }),
+        h('button', { class: 'ssearch-btn', type: 'button', 'aria-label': 'поиск', onclick: showSearch }, icon('search'))),
       h('div', { class: 'snavs' },
-        nav('plus', 'новый чат', function () { newChat(null); closeSheet(); }),
-        nav('search', 'поиск', showSearch),
-        nav('folder', 'новый проект', function () { projectForm(null); }),
-        nav('user', 'персонализация', openPersonal)),
+        nav('plus', 'новый чат', function () { newChat(null); closeSheet(); setDrawer(false); }, 'snav-new'),
+        nav('search', 'поиск', showSearch, 'snav-search'),
+        nav('folder', 'новый проект', function () { setDrawer(false); projectForm(null); }),
+        nav('user', 'персонализация', function () { setDrawer(false); openPersonal(); }),
+        nav('star', 'подписки', function () { setDrawer(false); openPlans(); })),
       searchBox, body, foot);
     sideUI = { input: input, fill: fill, show: showSearch };
   }
@@ -605,6 +655,62 @@
     return out.join('\n').slice(0, 1900);
   }
 
+
+  /* ---------- подписки ---------- */
+  var PLANS = [
+    { id: 'free', name: 'free', price: 0, line: '20 сообщений в день', year: '' },
+    { id: 'pro', name: 'pro', price: 1090, limit: 300 },
+    { id: 'max', name: 'max', price: 5990, limit: 1500 },
+    { id: 'ultra', name: 'ultra', price: 11990, limit: 5000 }
+  ];
+  var money = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  function openPlans(period) {
+    var year = period === 'year';
+    var seg = h('div', { class: 'seg two' }, [['month', 'месяц'], ['year', 'год · ×10']].map(function (x) {
+      var b = h('button', { type: 'button', class: (x[0] === 'year') === year ? 'on' : '', text: x[1] });
+      b.addEventListener('click', function () { openPlans(x[0]); });
+      return b;
+    }));
+    var cards = PLANS.map(function (p) {
+      var cur = sub ? sub.plan === p.id : p.id === 'free';
+      var price = p.price ? money(p.price * (year ? 10 : 1)) + ' ₸ / ' + (year ? 'год' : 'месяц') : 'бесплатно';
+      var line = p.limit ? money(p.limit * (year ? 10 : 1)) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line;
+      var msg = 'Здравствуйте! Хочу купить подписку DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(p.price * (year ? 10 : 1)) + ' ₸).';
+      return h('div', { class: 'plan' + (cur ? ' cur' : '') },
+        h('div', { class: 'plan-h' }, h('span', { class: 'plan-n', text: p.name }), cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null),
+        h('p', { class: 'plan-p', text: price }), h('p', { class: 'plan-l', text: line }),
+        p.price ? h('a', { class: 'btn solid block', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'купить' }) : null);
+    });
+    var code = field('input', { type: 'text', placeholder: 'код подписки', 'aria-label': 'код подписки', autocapitalize: 'characters', spellcheck: 'false' });
+    var note = h('p', { class: 'cap', text: 'после оплаты в ватсап пришлют код. введи его здесь.' });
+    var go = h('button', { class: 'btn', type: 'button', text: 'активировать' });
+    go.addEventListener('click', function () {
+      var v = code.value.trim().toUpperCase(); if (!v) return;
+      go.disabled = true; note.textContent = 'проверяю…';
+      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'sub', device: device, code: v }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          go.disabled = false;
+          if (x.ok && x.j.plan) {
+            subCode = v; sub = { plan: x.j.plan, period: x.j.period, exp: x.j.exp };
+            ls.set(KEY_CODE, subCode); ls.set(KEY_SUB, JSON.stringify(sub));
+            lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit, plan: x.j.plan }; ls.set(KEY_LEFT, JSON.stringify(lastLeft));
+            showLeft(); refreshSide(); toast('подписка ' + x.j.plan + ' включена'); openPlans(sub.period);
+          } else note.textContent = x.j.error === 'expired' ? 'эта подписка уже закончилась' : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
+        }, function () { go.disabled = false; note.textContent = 'нет связи с воркером'; });
+    });
+    var off = sub ? twice('отключить код на этом устройстве', 'точно? нажми ещё раз', function () {
+      subCode = ''; sub = null; ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); refreshSide(); openPlans(period);
+    }) : null;
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'подписки' }),
+      seg,
+      h('div', { class: 'plans' }, cards),
+      h('p', { class: 'label', text: 'уже купил' }),
+      h('div', { class: 'row-in' }, code, go), note, off], true);
+  }
+
   function openMenu() {
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
     var seg = h('div', { class: 'seg' }, [['dark', 'тёмная'], ['light', 'светлая'], ['auto', 'авто']].map(function (x) {
@@ -614,10 +720,12 @@
     }));
     var pers = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: 'персонализация' }), icon('user'));
     pers.addEventListener('click', openPersonal);
+    var subs = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: sub ? 'подписка: ' + sub.plan : 'подписки' }), icon('star'));
+    subs.addEventListener('click', function () { openPlans(); });
     openSheet([
       h('h2', { text: 'настройки' }),
       h('div', { class: 'form' },
-        h('p', { class: 'label', text: 'ии' }), pers,
+        h('p', { class: 'label', text: 'ии' }), pers, subs,
         h('p', { class: 'label', text: 'тема' }), seg,
         h('p', { class: 'label', text: 'данные' }),
         twice('удалить все чаты', 'точно удалить? нажми ещё раз', function () {
@@ -741,6 +849,7 @@
       var ctl = window.AbortController ? new AbortController() : null, timer = setTimeout(function () { if (ctl) ctl.abort(); }, 75000);
       var body = { mode: 'chat', messages: p.list, device: device };
       if (instr) body.instructions = instr;
+      if (subCode) body.code = subCode;
       return fetch(API, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
       }).then(function (r) { clearTimeout(timer); return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); },
@@ -750,7 +859,7 @@
       if (x.ok && x.j.answer) {
         var m = { id: uid(), role: 'assistant', text: String(x.j.answer), thumbs: [] };
         c.msgs.push(m); c.updated = Date.now(); save();
-        if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
+        if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0, plan: x.j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
         if (here()) {
           var el = msgEl(m, true); chat.append(el);
           requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -759,12 +868,20 @@
         return;
       }
       var j = x.j || {}, msg;
-      if (x.st === 429) { lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0 }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); msg = 'лимит на сегодня исчерпан, завтра можно снова'; }
+      var plans = false;
+      if (x.st === 429) {
+        lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0, plan: j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft();
+        msg = sub ? 'лимит твоего тарифа исчерпан. можно взять тариф побольше' : 'лимит на сегодня исчерпан, завтра можно снова. или возьми подписку'; plans = true;
+      }
+      else if (j.error === 'code' || j.error === 'expired') {
+        msg = j.error === 'expired' ? 'подписка закончилась. можно продлить в тарифах' : 'код подписки не найден. введи его заново в тарифах';
+        subCode = ''; sub = null; ls.del ? ls.del(KEY_CODE) : ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); plans = true;
+      }
       else if (x.st === 413) msg = 'фото слишком тяжёлые. убери одно или пришли поменьше';
       else if (x.st === 403) msg = 'воркер не пускает этот сайт (' + location.origin + '). добавь его в ALLOWED_ORIGINS';
       else if (j.error === 'mode') msg = 'в воркере нет режима chat: задеплой worker/full-worker.js';
       else msg = 'не получилось ответить: ' + (j.detail || j.error || x.st);
-      if (here()) showError(msg); else toast(msg);
+      if (here()) showError(msg, plans); else toast(msg);
     }).catch(function (e) {
       if (here()) setThinking(false);
       var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
@@ -784,6 +901,7 @@
   /* ---------- шапка, подсказки, клавиатура, заставка ---------- */
   $('#chats').append(icon('list')); $('#chats').addEventListener('click', function () { openChats(); });
   $('#newchat').append(icon('plus')); $('#newchat').addEventListener('click', function () { newChat(S.cur ? (curChat() || {}).project : S.pendingProject); });
+  $('#left').addEventListener('click', function () { openPlans(); });
   $('#menu').append(icon('gear')); $('#menu').addEventListener('click', openMenu);
   HINTS.forEach(function (q, i) {
     $('#chips').append(h('button', { class: 'chip', type: 'button', text: q, onclick: function () { if (i === HINTS.length - 1) $('#file').click(); else send(q); } }));
