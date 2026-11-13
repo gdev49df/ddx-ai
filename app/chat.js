@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.8';
+  var VERSION = 'v2.9';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
