@@ -1281,3 +1281,73 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .dotfield i { box-shadow: none; will-change: opacity, transform; }
 body.typing .dotfield, body.lock .dotfield { display: none; }
 .dotfield { contain: strict; }
+
+/* ===== v4: оболочка как в Claude. шапка сверху, лента с прокруткой, поле ввода в потоке снизу ===== */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+body { min-height: 0; }
+body.lock { position: static; }
+.fade { display: none; }
+.app { position: fixed; left: 0; right: 0; top: 0; height: var(--app-h, 100dvh); transform: translateY(var(--app-y, 0px)); max-width: none; margin: 0; padding: 0; z-index: 1; display: flex; flex-direction: column; }
+
+/* шапка: кнопки по краям, название по центру */
+.app .bar { position: relative; top: auto; flex: none; width: 100%; max-width: 680px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; gap: 8px;
+  background: none; -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-mask-image: none; mask-image: none; border: 0; }
+.app .bar .brand { flex: 1; min-width: 0; padding: 0; text-align: center; }
+.app .bar .label { display: none; }
+.app .bar h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
+.app .bar h1.is-brand { font-size: 17px; letter-spacing: .16em; padding-top: 0; }
+.app .bar .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: rgb(var(--w) / .06); border: 0; box-shadow: none; }
+.app .bar-r { min-width: 40px; justify-content: flex-end; }
+.app .bar::after { content: ""; position: absolute; left: 0; right: 0; bottom: -14px; height: 14px; background: linear-gradient(var(--bg), transparent); pointer-events: none; z-index: 3; }
+
+/* лента сообщений: своя прокрутка, внизу плавное затухание */
+.app #view { flex: 1; min-height: 0; width: 100%; max-width: 680px; margin: 0 auto; padding: 10px 14px 18px; display: flex; flex-direction: column;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none; }
+.app #view::-webkit-scrollbar { display: none; }
+.app #view > .chat { flex: none; }
+.app .hero { flex: 1; min-height: 0; padding: 0 4px 6%; }
+.msg.ai, .msg.me { scroll-margin-top: 10px; }
+
+/* поле ввода: в потоке, по ширине ленты. над клавиатурой оно оказывается само, когда оболочка уменьшается */
+body .app .composer, body.typing .app .composer { position: relative; left: auto; right: auto; bottom: auto; flex: none; width: 100%; max-width: 680px; margin: 0 auto; z-index: 5;
+  padding: 4px 10px calc(env(safe-area-inset-bottom) + 8px); transform: none !important; }
+html.kbopen body .app .composer { padding-bottom: 8px; }
+.app .composer .sugg { margin: 0 0 8px; padding: 0 2px 2px; }
+
+/* карточка ввода как в Claude: сверху текст, снизу ряд управления */
+.app .composer .card { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: 6px; row-gap: 0; padding: 8px 10px 10px 12px; border-radius: 28px; }
+.app .composer .card > .atts, .app .composer .card > .membar, .app .composer .card > .skillbar { grid-column: 1 / -1; order: -1; padding-left: 0; padding-right: 0; }
+.app .composer .tbar, .app .composer .cap-in { display: contents; }
+.app .composer .cap-in .field { grid-column: 1 / -1; order: 1; min-height: 40px; padding: 6px 4px 10px; }
+.app .composer .cap-in .ib { width: 38px; height: 38px; }
+.app .composer .cap-in .ib svg.i { width: 20px; height: 20px; }
+.app .composer #pick { order: 2; grid-column: 1; background: rgb(var(--w) / .06); }
+.app .composer .tbar .tchip:not(.model) { order: 3; grid-column: 2; }
+.app .composer .tchip.model { order: 4; grid-column: 4; margin: 0; }
+.app .composer #mic { order: 5; grid-column: 5; }
+.app .composer #send { order: 6; grid-column: 6; }
+.app .composer .tchip { min-height: 34px; }
+
+/* сообщения: твоё в мягкой плашке, ответ ИИ текстом на всю ширину */
+.msg.me:not(.editing) { background: rgb(var(--w) / .09); border: 1px solid rgb(var(--w) / .07); box-shadow: none; border-radius: 20px 20px 6px 20px; }
+.msg.me:not(.editing) p { color: var(--ink); font-weight: 400; }
+.msg.me:not(.editing) .medit { color: var(--mute); opacity: 1; }
+.msg.ai { max-width: none; padding: 2px 2px; }
+
+/* плавающие элементы считают отступ от высоты поля ввода */
+.downbtn { bottom: calc(var(--cph, 72px) + 14px); }
+html.kbopen .downbtn { display: none; }
+.toast { bottom: calc(var(--cph, 72px) + 16px); }
+body.typing .toast { bottom: calc(var(--cph, 72px) + 16px); }
+html.kbopen .toast { bottom: calc(var(--kb, 0px) + var(--cph, 72px) + 16px); }
+
+@media (min-width: 900px) {
+  .app { left: 300px; padding: 0 32px; }
+  .app .bar { max-width: var(--cw, 760px); padding: 20px 4px 10px; }
+  .app .bar h1 { font-size: 18px; }
+  .app #view, body .app .composer, body.typing .app .composer { max-width: var(--cw, 760px); }
+  body .app .composer { padding-bottom: 24px; }
+  .toast { left: calc(50% + 150px); bottom: calc(var(--cph, 72px) + 16px); }
+  .app .composer .tchip.model { margin: 0; }
+}
+.app .bar::before { display: none; }

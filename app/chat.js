@@ -674,7 +674,8 @@
     if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
     showHero(); showLeft(); showSugg();
   }
-  function toBottom(smooth) { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
+  var scroller = $('#view');
+  function toBottom(smooth) { scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
   function hm(ts) { return new Date(ts).toLocaleTimeString(window.I18N ? I18N.locale() : 'ru-RU', { hour: '2-digit', minute: '2-digit' }); }
   // окно в 12 часов закончилось: лимит снова полный
@@ -750,11 +751,11 @@
   var lockY = 0;
   function lockPage() {
     var b = document.body; if (b.classList.contains('lock')) return;
-    lockY = window.pageYOffset || 0; b.style.top = (-lockY) + 'px'; b.classList.add('lock');
+    b.classList.add('lock');
   }
   function unlockPage() {
     var b = document.body; if (!b.classList.contains('lock')) return;
-    b.classList.remove('lock'); b.style.top = ''; window.scrollTo(0, lockY);
+    b.classList.remove('lock');
   }
   // страховка: если окно закрыто, а блокировка осталась, чаты перестанут листаться
   setInterval(function () { if (document.body.classList.contains('lock') && sheet.hidden && !palEl) unlockPage(); }, 1500);
@@ -839,7 +840,7 @@
   function newChat(projectId) {
     greet = '';
     S.cur = null; S.pendingProject = projectId || null; clearError(); atts = []; renderAtts();
-    save(); renderAll(); syncSend(); window.scrollTo(0, 0);
+    save(); renderAll(); syncSend(); scroller.scrollTop = 0;
     if (!coarse) ta.focus();
   }
   function openChat(id) { S.cur = id; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
@@ -2827,11 +2828,11 @@
   document.body.append(downBtn);
   downBtn.addEventListener('click', function () { toBottom(true); });
   var downTick = 0;
-  window.addEventListener('scroll', function () {
+  scroller.addEventListener('scroll', function () {
     if (downTick) return;
     downTick = requestAnimationFrame(function () {
       downTick = 0;
-      var far = document.documentElement.scrollHeight - window.scrollY - window.innerHeight > 420;
+      var far = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 420;
       downBtn.classList.toggle('show', far && !!curMsgs().length);
     });
   }, { passive: true });
@@ -2920,46 +2921,27 @@
   if (window.ResizeObserver) new ResizeObserver(measure).observe($('#composer'));
   window.addEventListener('resize', measure);
 
-  // высота клавиатуры: строка ввода едет вместе с ней
-  function kbSet() {
-    var ae = document.activeElement, typingNow = !!ae && /^(input|textarea)$/i.test(ae.tagName || '');
-    var v = 0;
-    if (window.visualViewport && typingNow && window.visualViewport.scale < 1.02) {
-      var vp = window.visualViewport; v = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
-      if (v < 120) v = 0; // настоящая клавиатура выше 120 px, меньшее значение это погрешность iOS при запуске
-    }
-    if (kbSet.last !== v) { kbSet.last = v; document.documentElement.style.setProperty('--kb', v + 'px'); }
-    if (!typingNow) document.body.classList.remove('typing');
+  // оболочка приложения занимает ровно видимую область: высота и сдвиг берутся у visualViewport.
+  // когда открывается клавиатура, оболочка уменьшается, поле ввода (оно внутри оболочки) остаётся над клавиатурой
+  var rootEl = document.documentElement;
+  function vvSync() {
+    var vp = window.visualViewport, hh = vp ? vp.height : window.innerHeight, yy = vp ? vp.offsetTop : 0;
+    var kbh = Math.max(0, Math.round(window.innerHeight - hh - yy));
+    if (kbh < 120) kbh = 0;
+    rootEl.style.setProperty('--app-h', Math.round(hh) + 'px');
+    rootEl.style.setProperty('--app-y', Math.round(yy) + 'px');
+    rootEl.style.setProperty('--kb', kbh + 'px');
+    rootEl.classList.toggle('kbopen', kbh > 0);
+    if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
   }
-  // после закрытия клавиатуры, возврата в приложение и поворота пересчитываем отступ; страницу не прокручиваем
-  function kbSettle() { [0, 150, 450].forEach(function (d) { setTimeout(kbSet, d); }); }
-  if (window.visualViewport) {
-    var vv = window.visualViewport, raf = 0;
-    var kb = function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; kbSet(); }); };
-    vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); window.addEventListener('scroll', kb, { passive: true }); kb();
-  }
-  // страховка: если строка ввода где-то не на своём месте (зависла выше низа экрана), возвращаем её вниз
-  function heal() {
-    var c = $('#composer'); if (!c || document.hidden) return;
-    c.style.transform = '';
-    if (document.body.classList.contains('typing') || document.body.classList.contains('lock')) return;
-    var standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
-    if (!standalone || !window.screen) return;
-    var want = parseFloat(getComputedStyle(c).bottom) || 0, r = c.getBoundingClientRect();
-    var vp = window.visualViewport, top = vp ? vp.offsetTop : 0;
-    var diff = Math.round(window.screen.height - (r.bottom + top) - want);
-    if (diff > 4 && diff < 200) c.style.transform = 'translateY(' + diff + 'px)';
-  }
-  setInterval(heal, 1500);
-  ['pageshow', 'resize', 'orientationchange', 'focusout', 'load'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(heal, 80); setTimeout(heal, 500); }); });
-  document.addEventListener('visibilitychange', function () { setTimeout(heal, 80); });
-  setTimeout(heal, 300);
-  window.addEventListener('orientationchange', kbSettle);
-  window.addEventListener('pageshow', kbSettle);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) kbSettle(); });
-  document.addEventListener('focusout', kbSettle);
+  var vvRaf = 0, vvTick = function () { if (vvRaf) return; vvRaf = requestAnimationFrame(function () { vvRaf = 0; vvSync(); }); };
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', vvTick); window.visualViewport.addEventListener('scroll', vvTick); }
+  window.addEventListener('resize', vvTick); window.addEventListener('scroll', vvTick, { passive: true });
+  ['pageshow', 'orientationchange', 'focusout'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(vvSync, 60); setTimeout(vvSync, 400); }); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { vvSync(); setTimeout(vvSync, 300); } });
+  vvSync();
   ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(function () { toBottom(true); }, 320); });
-  ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); kbSettle(); }, 60); });
+  ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); vvSync(); }, 60); });
 
   // горячие клавиши на компьютере: ctrl/cmd+k поиск по чатам, / в поле ввода, ctrl/cmd+shift+o не трогаем (занято браузером)
   document.addEventListener('keydown', function (e) {
