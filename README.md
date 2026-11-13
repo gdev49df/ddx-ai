@@ -17,7 +17,11 @@ DDX AI: чат (pwa) на воркере ddx-ai (groq), в том же стил�
 - `app/`: сам чат (`index.html`, `styles.css`, `chat.js`, `theme.js`, `sw.js`, `manifest.json`, шрифты и иконки)
 - `worker/chat-patch-1.js` и `worker/chat-patch-2.js`: две вставки в код воркера ddx-ai, добавляют режим `chat` с поддержкой фото
 
-## важно: обнови вставки в воркере
+## важно: воркер должен знать режим chat
+
+проще всего заменить весь код воркера файлом `worker/full-worker.js` (код planner + режим chat, проверен): Cloudflare → Workers → ddx-ai → Edit code → вставить → Deploy. привязки (KV, DB) и секрет GROQ_API_KEY остаются.
+
+Либо вручную, двумя вставками:
 
 Фото работают только с новой версией вставок. Если старые уже стоят в воркере, замени их целиком:
 
