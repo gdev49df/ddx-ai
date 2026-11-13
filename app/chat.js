@@ -2926,6 +2926,7 @@
     var v = 0;
     if (window.visualViewport && typingNow && window.visualViewport.scale < 1.02) {
       var vp = window.visualViewport; v = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
+      if (v < 120) v = 0; // настоящая клавиатура выше 120 px, меньшее значение это погрешность iOS при запуске
     }
     if (kbSet.last !== v) { kbSet.last = v; document.documentElement.style.setProperty('--kb', v + 'px'); }
     if (!typingNow) document.body.classList.remove('typing');
