@@ -39,7 +39,7 @@ footer{text-align:center;color:#555;font-size:12px;padding:0 0 calc(env(safe-are
 </div>
 <script>
 // адрес твоего воркера (после деплоя замени на свой)
-var API = 'https://w-chat.wsmp.workers.dev/';
+var API = 'https://ddx-ai.wsmp.workers.dev/';
 
 var log = document.getElementById('log'), t = document.getElementById('t'), s = document.getElementById('s');
 var hist = [];
@@ -64,7 +64,7 @@ document.getElementById('f').addEventListener('submit', function (ev) {
   hist.push({ role: 'user', content: q }); add('u', q); save();
   s.disabled = true;
   var wait = add('a', '…');
-  fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: hist.slice(-20), device: device }) })
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'chat', messages: hist.slice(-20), device: device }) })
     .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, st: r.status }; }); })
     .then(function (x) {
       if (x.ok && x.j.answer) { wait.textContent = x.j.answer; hist.push({ role: 'assistant', content: x.j.answer }); save(); }
