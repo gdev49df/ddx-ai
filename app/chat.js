@@ -685,15 +685,29 @@
     if (typeof armLimitNote === 'function') armLimitNote();
   }
 
+  var thinkTimer = 0;
+  var THINK_WORDS = ['думаю…', 'размышляю…', 'подбираю слова…', 'собираю мысли…', 'пишу ответ…', 'секунду…', 'соображаю…', 'копаюсь в памяти…', 'обдумываю…', 'формулирую…'];
+  var THINK_SEARCH = ['ищу в интернете…', 'листаю сайты…', 'читаю источники…', 'сверяю данные…'];
+  var THINK_DEEP = ['думаю подольше…', 'проверяю рассуждение…', 'взвешиваю варианты…', 'разбираю по шагам…'];
   function setThinking(on, quiet) {
+    if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = 0; }
     if (thinkEl) { thinkEl.remove(); thinkEl = null; }
     if (on) {
-      thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), h('span', { text: 'думаю…' }));
+      var pool = THINK_WORDS.slice().sort(function () { return Math.random() - .5; });
+      if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
+      if (busy && lastReqThink) pool = THINK_DEEP.concat(pool.slice(0, 3));
+      var i = 0, span = h('span', { text: pool[0] });
+      thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), span);
       chat.append(thinkEl);
+      thinkTimer = setInterval(function () {
+        if (!thinkEl || !thinkEl.isConnected) { clearInterval(thinkTimer); thinkTimer = 0; return; }
+        i = (i + 1) % pool.length; span.textContent = pool[i];
+      }, 2600);
       if (!quiet) toBottom(true);
     }
     showHero();
   }
+  var lastReqSearch = false, lastReqThink = false;
   function clearError() { if (errEl) { errEl.remove(); errEl = null; } }
   function showError(text, plans) {
     clearError();
@@ -2616,7 +2630,7 @@
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
-    busy = true; busyChat = c.id; syncSend(); clearError(); setThinking(true);
+    busy = true; busyChat = c.id; syncSend(); clearError(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn; setThinking(true);
     var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
