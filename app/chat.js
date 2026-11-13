@@ -721,7 +721,7 @@
       if (busy && lastReqSearch) pool = THINK_SEARCH.slice(0, 2).concat(pool.slice(0, 3)).concat(THINK_SEARCH.slice(2));
       if (busy && lastReqThink) pool = THINK_DEEP.concat(pool.slice(0, 3));
       var i = 0, span = h('span', { text: pool[0] });
-      thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), span);
+      thinkEl = h('div', { class: 'msg ai thinking' + (quiet ? '' : ' rise'), role: 'status' }, logo('logo think'), span, h('span', { class: 'tdots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')));
       chat.append(thinkEl);
       thinkTimer = setInterval(function () {
         if (!thinkEl || !thinkEl.isConnected) { clearInterval(thinkTimer); thinkTimer = 0; return; }
@@ -2948,6 +2948,24 @@
   if (acct) syncDown(true);
   refreshSide();
   toBottom(false);
+
+  /* белые точки: мерцающий фон и круг от касания */
+  (function () {
+    var layer = h('div', { class: 'dotfield', 'aria-hidden': 'true' }), n = 34;
+    for (var i = 0; i < n; i++) {
+      var d = h('i'), sz = (1.5 + Math.random() * 2.5).toFixed(1);
+      d.style.cssText = 'left:' + (Math.random() * 100).toFixed(1) + '%;top:' + (Math.random() * 100).toFixed(1) + '%;width:' + sz + 'px;height:' + sz + 'px;animation-delay:' + (-Math.random() * 9).toFixed(1) + 's;animation-duration:' + (5 + Math.random() * 6).toFixed(1) + 's';
+      layer.append(d);
+    }
+    document.body.prepend(layer);
+    var lastRip = 0;
+    document.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest || !e.target.closest('button, .chip, .btn, .tchip, .sw, [role="button"]')) return;
+      var t = Date.now(); if (t - lastRip < 120) return; lastRip = t;
+      var r = h('i', { class: 'ripdot' }); r.style.left = e.clientX + 'px'; r.style.top = e.clientY + 'px';
+      document.body.append(r); setTimeout(function () { r.remove(); }, 700);
+    }, { passive: true });
+  })();
 
   var splash = $('#splash');
   $('#splash-logo').append(logo('logo big'));
