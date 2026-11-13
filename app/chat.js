@@ -692,8 +692,8 @@
   function showLeft() {
     refreshLeft();
     var el = $('#left');
-    if (!lastLeft) { el.hidden = true; return; }
-    el.hidden = false;
+    el.hidden = true;
+    if (!lastLeft) return;
     var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
     el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений в окне 12 часов: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (backAt() ? ' · восстановится в ' + hm(backAt()) : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
