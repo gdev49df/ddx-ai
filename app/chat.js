@@ -2938,6 +2938,22 @@
     var kb = function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; kbSet(); }); };
     vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); window.addEventListener('scroll', kb, { passive: true }); kb();
   }
+  // страховка: если строка ввода где-то не на своём месте (зависла выше низа экрана), возвращаем её вниз
+  function heal() {
+    var c = $('#composer'); if (!c || document.hidden) return;
+    c.style.transform = '';
+    if (document.body.classList.contains('typing') || document.body.classList.contains('lock')) return;
+    var standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    if (!standalone || !window.screen) return;
+    var want = parseFloat(getComputedStyle(c).bottom) || 0, r = c.getBoundingClientRect();
+    var vp = window.visualViewport, top = vp ? vp.offsetTop : 0;
+    var diff = Math.round(window.screen.height - (r.bottom + top) - want);
+    if (diff > 4 && diff < 200) c.style.transform = 'translateY(' + diff + 'px)';
+  }
+  setInterval(heal, 1500);
+  ['pageshow', 'resize', 'orientationchange', 'focusout', 'load'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(heal, 80); setTimeout(heal, 500); }); });
+  document.addEventListener('visibilitychange', function () { setTimeout(heal, 80); });
+  setTimeout(heal, 300);
   window.addEventListener('orientationchange', kbSettle);
   window.addEventListener('pageshow', kbSettle);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) kbSettle(); });
