@@ -465,3 +465,13 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
 .left { cursor: pointer; }
 
 .sver { margin: 6px 0 0; text-align: center; font-size: 11px; color: var(--mute2); }
+
+/* длинный текст, код и таблицы не растягивают чат в ширину */
+.chat { grid-template-columns: minmax(0, 1fr); }
+.msg { min-width: 0; max-width: 100%; }
+.msg.me { max-width: 84%; }
+.md, .md p, .md li { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.md pre { max-width: 100%; }
+.md .tbl { max-width: 100%; }
+.md img { max-width: 100%; }
+html, body { overflow-x: clip; }
