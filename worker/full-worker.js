@@ -505,6 +505,48 @@ async function takeQuota(env, user, kind) {
   return { info: info, refund: refund };
 }
 
+
+/* ---------- DDX AI: облачная копия чатов и привязка тарифа к аккаунту (хранится в KV) ---------- */
+const AI_SUB_CODE = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
+
+async function aiSubOf(env, userId) {
+  let link = null;
+  try { link = JSON.parse(await env.KV.get('ai:s:' + userId)); } catch (e) { link = null; }
+  if (!link || !link.code) return null;
+  let raw = null;
+  try { raw = JSON.parse(await env.KV.get('sub:' + link.code)); } catch (e) { raw = null; }
+  if (!raw || !raw.plan) return null;
+  if (raw.exp && Date.now() > Number(raw.exp)) return null;
+  return { code: link.code, plan: raw.plan, period: raw.period === 'year' ? 'year' : 'month', exp: raw.exp || null };
+}
+
+async function aiRoute(req, env, path, origin) {
+  if (!env.KV) return reply(503, { error: 'no kv', detail: 'в воркере нет привязки KV' }, origin);
+  const u = await authUser(req, env);
+  if (!u) return reply(401, { error: 'auth' }, origin);
+  const dk = 'ai:d:' + u.id;
+  if (path === '/ai/get' && req.method === 'GET') {
+    let doc = null;
+    try { doc = JSON.parse(await env.KV.get(dk)); } catch (e) { doc = null; }
+    return reply(200, { json: doc ? doc.json : null, updated: doc ? doc.updated : 0, sub: await aiSubOf(env, u.id), user: userInfo(u) }, origin);
+  }
+  if (path === '/ai/put' && req.method === 'POST') {
+    const raw = await req.text();
+    if (raw.length > 1000000) return reply(413, { error: 'too big' }, origin);
+    let b; try { b = JSON.parse(raw); } catch (e) { return reply(400, { error: 'json' }, origin); }
+    const json = String(b.json || '');
+    if (json.length < 2 || json.length > 900000) return reply(413, { error: 'size', detail: 'данных слишком много для облака' }, origin);
+    try { JSON.parse(json); } catch (e) { return reply(400, { error: 'json' }, origin); }
+    let cur = null;
+    try { cur = JSON.parse(await env.KV.get(dk)); } catch (e) { cur = null; }
+    if (cur && cur.updated !== (Number(b.base) || 0) && !b.force) return reply(409, { error: 'conflict', json: cur.json, updated: cur.updated }, origin);
+    const now = Math.max(Date.now(), (cur ? cur.updated : 0) + 1);
+    await env.KV.put(dk, JSON.stringify({ json: json, updated: now }));
+    return reply(200, { updated: now }, origin);
+  }
+  return reply(404, { error: 'route' }, origin);
+}
+
 export default {
   async fetch(req, env) {
     const origin = req.headers.get('Origin') || '';
@@ -516,6 +558,9 @@ export default {
     const path = new URL(req.url).pathname;
     if (path.indexOf('/push/') === 0) {
       try { return await pushRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'push', detail: String(e.message || e).slice(0, 200) }, origin); }
+    }
+    if (path.indexOf('/ai/') === 0) {
+      try { return await aiRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'ai', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
     if (path.indexOf('/auth/') === 0 || path.indexOf('/data/') === 0 || path.indexOf('/pro/') === 0) {
       try { return await authRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }
@@ -576,20 +621,25 @@ export default {
         const day = dayKey(env);
         // код подписки: в KV лежит ключ  sub:КОД  со значением {"plan":"pro","period":"month","exp":1893456000000}
         // period: month или year, exp: когда подписка заканчивается (мс, можно не указывать)
-        const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
+        let code = AI_SUB_CODE(body.code);
+        // с аккаунтом тариф привязан к нему: код сгорает за первым аккаунтом и дальше работает без ввода на любом его устройстве
+        if (!code && user && env.KV) { const own = await aiSubOf(env, user.id); if (own) code = own.code; }
         let sub = null, limit = FREE_DAY, usedKey = null;
         if (code) {
           if (!env.KV) return reply(403, { error: 'code' }, origin);
           let raw = null;
           try { raw = JSON.parse(await env.KV.get('sub:' + code)); } catch (e0) { raw = null; }
           if (!raw || !PLANS[raw.plan]) return reply(403, { error: 'code' }, origin);
+          const owner = await env.KV.get('sub-owner:' + code);
+          if (owner && (!user || String(user.id) !== owner)) return reply(403, { error: 'used', detail: 'этот код уже привязан к другому аккаунту' }, origin);
+          if (!owner && user) { await env.KV.put('sub-owner:' + code, String(user.id)); await env.KV.put('ai:s:' + user.id, JSON.stringify({ code: code, at: Date.now() })); }
           if (raw.exp && Date.now() > Number(raw.exp)) return reply(403, { error: 'expired' }, origin);
           const year = raw.period === 'year';
           sub = { plan: raw.plan, period: year ? 'year' : 'month', exp: raw.exp || null };
           limit = PLANS[raw.plan] * (year ? 10 : 1);
           usedKey = year ? 'u:' + code : 'u:' + code + ':' + day.slice(0, 7);
         } else if (env.KV) {
-          usedKey = 'c:' + device + ':' + day;
+          usedKey = user ? 'c:u' + user.id + ':' + day : 'c:' + device + ':' + day;
         }
         const used = usedKey ? num(await env.KV.get(usedKey)) : 0;
         const ttl = sub && sub.period === 'year' ? 34000000 : 3000000;

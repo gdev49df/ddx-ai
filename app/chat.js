@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.3.1';
+  var VERSION = 'v2.4';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -149,7 +149,7 @@
     });
   }
   function save() {
-    refreshSide();
+    refreshSide(); if (typeof schedulePush === 'function') schedulePush();
     if (ls.set(KEY, pack(false))) return;
     // память переполнена: сначала убираем превью фото
     if (!ls.set(KEY, pack(true))) toast('не хватает памяти: удали старые чаты');
@@ -389,7 +389,7 @@
       var shr = h('button', { class: 'link', type: 'button' }, icon('share'), h('span', { text: 'поделиться' }));
       shr.addEventListener('click', function () { shareText(m.text, 'ответ DDX AI'); });
       el.append(h('div', { class: 'msg-actions' }, copy, shr));
-      if (fresh) { streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
+      if (fresh) { el.classList.add('fresh'); streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
     }
     return el;
   }
@@ -588,7 +588,7 @@
     return c;
   }
   function deleteChat(c) {
-    S.chats = S.chats.filter(function (x) { return x.id !== c.id; });
+    S.chats = S.chats.filter(function (x) { return x.id !== c.id; }); goneAdd(c.id);
     if (S.cur === c.id) S.cur = null;
     save(); renderAll();
   }
@@ -848,7 +848,7 @@
           list.forEach(function (id, i) { var p = projectById(id); if (p) p.ord = i; });
           changed = true;
         }
-        if (changed) { save(); fill(); }
+        if (changed) { save(); fill(); body.classList.add('reflow'); setTimeout(function () { body.classList.remove('reflow'); }, 450); }
       };
       window.addEventListener('pointerup', finish); window.addEventListener('pointercancel', stop);
       document.addEventListener('click', function (e) { if (swallow) { e.stopPropagation(); e.preventDefault(); } }, true);
@@ -992,7 +992,7 @@
         h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))];
     if (p) nodes[2].append(twice('удалить проект', 'точно удалить? чаты останутся', function () {
       S.chats.forEach(function (c) { if (c.project === p.id) c.project = null; });
-      S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); save(); updateHeader(); listsHome();
+      S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); goneAdd(p.id); save(); updateHeader(); listsHome();
     }, 'danger'));
     openSheet(nodes);
   }
@@ -1154,7 +1154,7 @@
     go.addEventListener('click', function () {
       var v = code.value.trim().toUpperCase(); if (!v) return;
       go.disabled = true; note.textContent = 'проверяю…';
-      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'sub', device: device, code: v }) })
+      fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'sub', device: device, code: v }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (x) {
           go.disabled = false;
@@ -1163,7 +1163,7 @@
             ls.set(KEY_CODE, subCode); ls.set(KEY_SUB, JSON.stringify(sub));
             lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit, plan: x.j.plan }; ls.set(KEY_LEFT, JSON.stringify(lastLeft));
             showLeft(); refreshSide(); toast('Тариф ' + x.j.plan + ' включён'); openPlans(sub.period);
-          } else note.textContent = x.j.error === 'expired' ? 'этот тариф уже закончился' : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
+          } else note.textContent = x.j.error === 'expired' ? 'этот тариф уже закончился' : x.j.error === 'used' ? (x.j.detail || 'этот код уже привязан к другому аккаунту') : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
         }, function () { go.disabled = false; note.textContent = 'нет связи с воркером'; });
     });
     var off = sub ? twice('отключить код на этом устройстве', 'точно? нажми ещё раз', function () {
@@ -1212,6 +1212,145 @@
     if (fn) b.addEventListener('click', fn); else b.disabled = true;
     return b;
   }
+
+  /* ---------- аккаунт и облако ---------- */
+  var KEY_ACCT = 'wchat-acct', KEY_CLOUD = 'wchat-cloud', KEY_SYNC = 'wchat-lastsync', acct = null;
+  try { acct = JSON.parse(ls.get(KEY_ACCT) || 'null'); } catch (eA) { acct = null; }
+  if (acct && !acct.token) acct = null;
+  var cloudBase = Number(ls.get(KEY_CLOUD)) || 0, lastSync = Number(ls.get(KEY_SYNC)) || 0, pushT = 0, syncing = false;
+  function authHdr() { var o = { 'Content-Type': 'application/json' }; if (acct && acct.token) o.Authorization = 'Bearer ' + acct.token; return o; }
+  function api(path, body, method) {
+    return fetch(API.replace(/\/+$/, '') + path, { method: method || (body ? 'POST' : 'GET'), headers: authHdr(), body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); });
+  }
+  function goneAdd(id) {
+    var g = S.settings.gone || (S.settings.gone = {}); g[id] = Date.now();
+    var keys = Object.keys(g); if (keys.length > 300) keys.sort(function (a, b) { return g[a] - g[b]; }).slice(0, keys.length - 300).forEach(function (k) { delete g[k]; });
+  }
+  var blank = function (v) { return v == null || v === '' || (Array.isArray(v) && !v.length); };
+  // слияние двух копий: чаты и проекты по id (новее побеждает), память и skills складываются, удалённое не воскресает
+  function mergeData(a, b, preferCloud) {
+    var sa = a.settings || {}, sb = b.settings || {}, gone = Object.assign({}, sb.gone || {}, sa.gone || {}), st = {};
+    var union = function (la, lb, pickNew) {
+      var m = {}; (lb || []).concat(la || []).forEach(function (x) { if (!x || !x.id || gone[x.id]) return; var o = m[x.id]; if (!o || !pickNew || (x.updated || 0) >= (o.updated || 0)) m[x.id] = x; });
+      return Object.keys(m).map(function (k) { return m[k]; });
+    };
+    Object.keys(Object.assign({}, sb, sa)).forEach(function (k) {
+      if (k === 'memory' || k === 'skills' || k === 'gone' || k === 'stick') return;
+      st[k] = preferCloud ? (blank(sb[k]) ? sa[k] : sb[k]) : (blank(sa[k]) ? sb[k] : sa[k]);
+    });
+    var seen = {}; st.memory = (sa.memory || []).concat(sb.memory || []).filter(function (t) { if (seen[t]) return false; seen[t] = 1; return true; });
+    var sk = {}; (sb.skills || []).concat(sa.skills || []).forEach(function (k) { sk[k.cmd] = k; }); st.skills = Object.keys(sk).map(function (k) { return sk[k]; });
+    st.gone = gone;
+    var chats = union(a.chats, b.chats, true).sort(function (x, y) { return (y.updated || 0) - (x.updated || 0); });
+    var cur = chats.some(function (c) { return c.id === a.cur; }) ? a.cur : (chats.some(function (c) { return c.id === b.cur; }) ? b.cur : null);
+    return { v: 3, cur: cur, open: Object.assign({}, b.open || {}, a.open || {}), settings: st, projects: union(a.projects, b.projects, false), chats: chats };
+  }
+  function packForCloud() {
+    var o = JSON.parse(pack(true));
+    o.chats.sort(function (x, y) { return y.updated - x.updated; });
+    var txt = JSON.stringify(o);
+    while (txt.length > 850000 && o.chats.length > 1) { o.chats.pop(); txt = JSON.stringify(o); }
+    return txt;
+  }
+  function markSync() { lastSync = Date.now(); ls.set(KEY_SYNC, String(lastSync)); }
+  function applyCloud(jsonStr, updated) {
+    var cloud = null; try { cloud = JSON.parse(jsonStr); } catch (e) { return; }
+    if (!cloud) return;
+    var local = JSON.parse(pack(false)), fresh = !local.chats.length && !local.projects.length;
+    ls.set(KEY, JSON.stringify(mergeData(local, cloud, fresh)));
+    load(); cloudBase = updated; ls.set(KEY_CLOUD, String(updated)); renderAll(); refreshSide();
+  }
+  function dropAcct(msg) {
+    acct = null; cloudBase = 0; ls.set(KEY_ACCT, ''); ls.set(KEY_CLOUD, '0');
+    subCode = ''; sub = null; ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); refreshSide();
+    if (msg) toast(msg);
+  }
+  function pushNow(retry) {
+    if (!acct) return Promise.resolve();
+    if (syncing) { schedulePush(); return Promise.resolve(); }
+    syncing = true;
+    return api('/ai/put', { json: packForCloud(), base: cloudBase }).then(function (x) {
+      if (x.ok) { cloudBase = x.j.updated; ls.set(KEY_CLOUD, String(cloudBase)); markSync(); return; }
+      if (x.st === 409 && !retry) { syncing = false; applyCloud(x.j.json, x.j.updated); return pushNow(true); }
+      if (x.st === 401) dropAcct('Сессия закончилась, войди снова');
+      else if (x.st === 413) toast('данных слишком много для облака');
+    }, function () { /* нет сети: повторим при следующем сохранении */ }).then(function () { syncing = false; });
+  }
+  function schedulePush() { if (!acct) return; clearTimeout(pushT); pushT = setTimeout(function () { pushNow(false); }, 2500); }
+  // забрать облако: при входе и при возвращении в приложение
+  function syncDown(quiet) {
+    if (!acct) return Promise.resolve();
+    return api('/ai/get').then(function (x) {
+      if (x.st === 401) { dropAcct('Сессия закончилась, войди снова'); return; }
+      if (!x.ok) { if (!quiet) toast(x.j.detail || 'облако пока недоступно'); return; }
+      if (x.j.sub && x.j.sub.code) {
+        subCode = x.j.sub.code; sub = { plan: x.j.sub.plan, period: x.j.sub.period, exp: x.j.sub.exp };
+        ls.set(KEY_CODE, subCode); ls.set(KEY_SUB, JSON.stringify(sub)); refreshSide();
+      }
+      if (x.j.json && x.j.updated !== cloudBase) { applyCloud(x.j.json, x.j.updated); markSync(); return pushNow(false); }
+      if (!x.j.json) return pushNow(false);
+      markSync();
+    }, function () { if (!quiet) toast('нет связи с воркером'); });
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && acct && !busy) syncDown(true); });
+
+  function openAuth(mode) {
+    mode = mode || 'in';
+    var login = field('input', { type: 'text', placeholder: 'логин (латиница, цифры)', 'aria-label': 'логин', maxlength: '24', autocomplete: 'username', spellcheck: 'false' });
+    var pass = field('input', { type: 'password', placeholder: 'пароль (от 6 символов)', 'aria-label': 'пароль', maxlength: '100', autocomplete: mode === 'in' ? 'current-password' : 'new-password' });
+    var nm = field('input', { type: 'text', placeholder: 'как тебя зовут', 'aria-label': 'имя', maxlength: '24', autocomplete: 'name' });
+    var err = h('p', { class: 'cap auth-err', text: '' });
+    var go = h('button', { class: 'btn solid block', type: 'button', text: mode === 'in' ? 'Войти' : 'Создать аккаунт' });
+    var seg = h('div', { class: 'seg two' }, ['in', 'up'].map(function (k) {
+      var b = h('button', { type: 'button', class: k === mode ? 'on' : '', text: k === 'in' ? 'Вход' : 'Регистрация' }); b.addEventListener('click', function () { if (k !== mode) openAuth(k); }); return b;
+    }));
+    var submit = function () {
+      var l = login.value.trim().toLowerCase(), p = pass.value;
+      if (!l || !p) { err.textContent = 'введи логин и пароль'; return; }
+      go.disabled = true; err.textContent = 'минуту…';
+      api(mode === 'in' ? '/auth/login' : '/auth/register', mode === 'in' ? { login: l, password: p } : { login: l, password: p, name: nm.value.trim() }).then(function (x) {
+        go.disabled = false;
+        if (x.ok && x.j.token) {
+          acct = { token: x.j.token, user: x.j.user }; ls.set(KEY_ACCT, JSON.stringify(acct));
+          if (!S.settings.name && x.j.user && (x.j.user.name || x.j.user.login)) S.settings.name = x.j.user.name || x.j.user.login;
+          save(); closeSheet(); toast(mode === 'in' ? 'Ты вошёл' : 'Аккаунт создан'); refreshSide(); syncDown(false);
+        } else err.textContent = x.st === 503 ? 'аккаунты на сервере ещё не включены (нужна база D1)' : (x.j.detail || 'не получилось, попробуй ещё раз');
+      }, function () { go.disabled = false; err.textContent = 'нет связи с воркером'; });
+    };
+    go.addEventListener('click', submit);
+    [login, pass, nm].forEach(function (f) { f.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); }); });
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Аккаунт' }),
+      h('p', { class: 'cap', text: 'С аккаунтом чаты, память, Skills и тариф доступны на всех твоих устройствах.' }),
+      seg,
+      h('div', { class: 'form' }, login, pass, mode === 'up' ? nm : null, err, go)
+    ], true);
+  }
+  function openAccount() {
+    if (!acct) { openAuth('in'); return; }
+    var u = acct.user || {}, nm = (S.settings.name || u.name || u.login || '').trim();
+    var when = lastSync ? new Date(lastSync).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'ещё не было';
+    var syncBtn = h('button', { class: 'btn block', type: 'button', text: 'Синхронизировать сейчас' });
+    syncBtn.addEventListener('click', function () { syncBtn.disabled = true; syncBtn.textContent = 'синхронизирую…'; syncDown(false).then(function () { toast('Готово'); openAccount(); }); });
+    var out = twice('Выйти из аккаунта', 'Точно выйти? Нажми ещё раз', function () {
+      api('/auth/logout', {}).then(function () { /* токен и так удаляем у себя */ }, function () { /* без сети */ });
+      dropAcct('Ты вышел из аккаунта'); closeSheet();
+    }, 'danger');
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Аккаунт' }),
+      h('div', { class: 'group acc' }, h('div', { class: 'acc-top' }, h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
+        h('div', { class: 'acc-t' }, h('b', { text: nm || u.login, raw: 1 }), h('span', { text: '@' + u.login, raw: 1 })))),
+      h('p', { class: 'glabel', text: 'Синхронизация' }),
+      h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('download'), h('span', { class: 'gl', text: 'Последняя' }), h('span', { class: 'gv', text: when }))),
+      syncBtn,
+      h('p', { class: 'cap', text: 'Чаты, проекты, память и Skills копируются в облако сами. Фото в облако не уходят, только текст.' }),
+      h('div', { class: 'group solo' }, out)
+    ], true);
+  }
+
   function openMenu() {
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
     var close = h('button', { class: 'round-x', type: 'button', 'aria-label': 'закрыть' }, icon('close')); close.addEventListener('click', closeSheet);
@@ -1226,7 +1365,7 @@
     var usage = lastLeft ? 'Осталось ' + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') : '';
     var up = h('button', { class: 'grow accent', type: 'button' }, icon('plus'), h('span', { class: 'gl', text: sub ? 'Сменить тариф' : 'Улучшить тариф' })); up.addEventListener('click', function () { openPlans(); });
     var del = twice('Удалить все чаты', 'Точно удалить? Нажми ещё раз', function () {
-      S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
+      S.chats.forEach(function (c) { goneAdd(c.id); }); S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); closeSheet();
     }, 'danger');
     openSheet([
       h('div', { class: 'shead2' }, close, h('h2', { text: 'Настройки' }), h('span', { class: 'sp' })),
@@ -1235,6 +1374,7 @@
           h('div', { class: 'acc-t' }, h('b', { text: nm || 'DDX AI', raw: 1 }), h('span', { text: 'Тариф ' + planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : '') }))), up),
       h('p', { class: 'glabel', text: 'Аккаунт' }),
       h('div', { class: 'group' },
+        acct ? grow2('Аккаунт', 'user', '@' + (acct.user && acct.user.login || ''), openAccount) : grow2('Войти или создать аккаунт', 'user', '', function () { openAuth('in'); }),
         grow2('Персонализация', 'user', nm || '', openPersonal),
         grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
         grow2('Skills', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
@@ -1653,7 +1793,7 @@
       if (instr) body.instructions = instr;
       if (subCode) body.code = subCode;
       return fetch(API, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
+        method: 'POST', headers: authHdr(), signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
       }).then(function (r) { clearTimeout(timer); return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); },
         function (e) { clearTimeout(timer); throw e; });
     }).then(function (x) {
@@ -1664,7 +1804,7 @@
         if (tm) {
           ansText = ansText.slice(0, tm.index).trim();
           var nt = tm[1].replace(/["«»“”.]+$/g, '').replace(/^["«»“”]+/, '').trim();
-          if (wantTitle && nt) { c.title = nt.charAt(0).toUpperCase() + nt.slice(1); updateHeader(); }
+          if (wantTitle && nt) { c.title = nt.charAt(0).toUpperCase() + nt.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
         }
         var m = { id: uid(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
         c.msgs.push(m); c.updated = Date.now(); save();
@@ -1750,6 +1890,7 @@
     up.addEventListener('click', go(function () { openPlans(); }));
     popEl = h('div', { class: 'popmenu up prof', role: 'menu' },
       top, up, h('i', { class: 'psep' }),
+      item(acct ? 'Аккаунт' : 'Войти', 'user', acct ? openAccount : function () { openAuth('in'); }, acct && acct.user ? acct.user.login : ''),
       item('Персонализация', 'user', openPersonal),
       item('Память', 'brain', openMemory, memN ? String(memN) : ''),
       item('Skills', 'bolt', openSkills, skillList().length ? String(skillList().length) : ''),
@@ -1832,6 +1973,7 @@
   });
   buildSide();
   load(); renderAll(); renderAtts(); grow(); syncSend(); measure();
+  if (acct) syncDown(true);
   refreshSide();
   toBottom(false);
 

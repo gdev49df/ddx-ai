@@ -655,7 +655,8 @@ mark.hl.cur { background: var(--paper); color: var(--on-paper); }
 
 /* no horizontal page scroll: wide content scrolls inside its own box */
 html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
-.app, #view, .bar { min-width: 0; max-width: 100%; }
+.app, #view, .bar { min-width: 0; }
+.app { max-width: 100%; }
 .chat { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .msg { min-width: 0; max-width: 100%; }
 .msg.me { max-width: 84%; }
@@ -737,3 +738,30 @@ body.sdrag, body.sdrag * { cursor: grabbing !important; }
 .srow.drop-into { background: rgb(var(--w) / .14); outline: 1px dashed rgb(var(--w) / .45); }
 .drop-zone { background: rgb(var(--w) / .06); border-radius: 12px; }
 .sitems[data-zone], .skids[data-zone] { min-height: 8px; }
+
+/* ===== плавность: только transform и opacity, коротко, чтобы не тормозило на телефоне ===== */
+@keyframes editin { from { opacity: .4; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes titlein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.seg.two { grid-template-columns: repeat(2, 1fr); }
+.msg.ai.fresh .blk { animation: rise .55s var(--ease) both; animation-delay: .12s; }
+.msg.me.editing { animation: editin .35s var(--spring) both; }
+.editbtns .btn { animation: rise .4s var(--ease) both; animation-delay: .08s; }
+.sheet .form > * { animation: rise .45s var(--ease) both; }
+.sheet .form > :nth-child(2) { animation-delay: .05s; } .sheet .form > :nth-child(3) { animation-delay: .1s; } .sheet .form > :nth-child(4) { animation-delay: .15s; } .sheet .form > :nth-child(5) { animation-delay: .2s; }
+.sheet .group .grow.sk, .sheet .memlist .mem { animation: rise .45s var(--ease) both; }
+.sheet .group .grow.sk:nth-child(2), .sheet .memlist .mem:nth-child(2) { animation-delay: .05s; } .sheet .group .grow.sk:nth-child(3), .sheet .memlist .mem:nth-child(3) { animation-delay: .1s; } .sheet .group .grow.sk:nth-child(n+4), .sheet .memlist .mem:nth-child(n+4) { animation-delay: .15s; }
+.sheet .acc-top .sava { animation: pop .55s var(--spring) both; animation-delay: .1s; }
+#title.tchg { animation: titlein .5s var(--ease) both; }
+.sbody.reflow .srow { animation: fadein .35s ease both; }
+.sghost { will-change: transform; transition: transform .2s var(--spring); }
+.srow { transition: background .25s, opacity .25s; }
+.skillbar { transition: transform .35s var(--spring), opacity .25s; }
+.skillbar:active { transform: scale(.96); }
+.bbtn, .medit, .sk-x, .sk-use, .sprof { -webkit-tap-highlight-color: transparent; }
+.btn:active, .pbuy:active { transform: scale(.97); }
+@media (hover: none) {
+  /* на телефоне анимации короче и без задержек, чтобы интерфейс отзывался сразу */
+  .sheet .form > *, .sheet .group .grow.sk, .sheet .memlist .mem { animation-duration: .3s; animation-delay: 0s !important; }
+  .msg.ai.fresh .blk { animation-duration: .4s; }
+}
