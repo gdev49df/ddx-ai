@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.9';
+  var VERSION = 'v2.0';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -757,43 +757,70 @@
 
   /* ---------- персонализация и настройки ---------- */
   var STYLES = [['short', 'коротко'], ['normal', 'обычно'], ['long', 'подробно']];
+  // варианты ответов: [значение, подпись, что сказать ИИ]
+  var PERS = [
+    ['style', 'Длина ответов', [['short', 'Коротко', 'Отвечай максимально коротко.'], ['normal', 'Обычно', ''], ['long', 'Подробно', 'Отвечай подробно, с пояснениями и примерами.']]],
+    ['tone', 'Тон', [['', 'Авто', ''], ['friendly', 'Дружелюбный', 'Тон: дружелюбный и тёплый.'], ['business', 'Деловой', 'Тон: деловой, без лишней болтовни.'], ['humor', 'С юмором', 'Тон: живой, с лёгким юмором.'], ['strict', 'Строгий', 'Тон: строгий и точный, без вольностей.']]],
+    ['level', 'Уровень объяснений', [['', 'Авто', ''], ['simple', 'Попроще', 'Объясняй простыми словами, как новичку, без сложных терминов.'], ['pro', 'Для профи', 'Пользователь разбирается в теме: можно использовать термины и не разжёвывать основы.']]],
+    ['address', 'Обращение', [['', 'Авто', ''], ['ty', 'На «ты»', 'Обращайся к пользователю на «ты».'], ['vy', 'На «вы»', 'Обращайся к пользователю на «вы».']]],
+    ['lang', 'Язык ответов', [['', 'Как в вопросе', ''], ['ru', 'Русский', 'Всегда отвечай на русском.'], ['kk', 'Қазақша', 'Всегда отвечай на казахском языке.'], ['en', 'English', 'Always reply in English.']]],
+    ['format', 'Оформление', [['', 'Авто', ''], ['plain', 'Простой текст', 'Пиши простым текстом без заголовков и таблиц.'], ['rich', 'Со структурой', 'Структурируй ответы: заголовки, списки и таблицы там, где это помогает.']]],
+    ['emoji', 'Эмодзи', [['', 'Авто', ''], ['none', 'Не нужны', 'Не используй эмодзи.'], ['some', 'Иногда', 'Эмодзи изредка уместны.'], ['lots', 'Чаще', 'Используй эмодзи охотно.']]]
+  ];
   function openPersonal() {
-    var st = S.settings, style = st.style || 'normal';
-    var name = field('input', { type: 'text', maxlength: '40', placeholder: 'как к тебе обращаться', value: st.name || '', 'aria-label': 'имя' });
-    var about = field('textarea', { rows: '4', maxlength: '500', placeholder: 'чем занимаешься, что интересно, что важно знать обо мне', 'aria-label': 'о тебе' });
-    var extra = field('textarea', { rows: '4', maxlength: '600', placeholder: 'свои правила для ответов: например «без воды», «примеры из жизни», «отвечай на казахском»', 'aria-label': 'свои инструкции' });
+    var st = S.settings, pick = {};
+    PERS.forEach(function (g) { pick[g[0]] = st[g[0]] != null ? st[g[0]] : (g[0] === 'style' ? 'normal' : ''); });
+    var name = field('input', { type: 'text', maxlength: '40', placeholder: 'Как к тебе обращаться', value: st.name || '', 'aria-label': 'имя' });
+    var role = field('input', { type: 'text', maxlength: '80', placeholder: 'Кто ты: студент, юрист, дизайнер…', value: st.role || '', 'aria-label': 'чем занимаешься' });
+    var about = field('textarea', { rows: '3', maxlength: '500', placeholder: 'Что интересно, что важно знать обо мне', 'aria-label': 'о тебе' });
+    var extra = field('textarea', { rows: '4', maxlength: '600', placeholder: 'Свои правила: например «без воды», «примеры из жизни», «в конце давай короткий итог»', 'aria-label': 'свои инструкции' });
     about.value = st.about || ''; extra.value = st.extra || '';
-    var seg = h('div', { class: 'seg' }, STYLES.map(function (x) {
-      var b = h('button', { type: 'button', class: x[0] === style ? 'on' : '', text: x[1] });
-      b.addEventListener('click', function () { style = x[0]; seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
-      return b;
-    }));
+    var blocks = PERS.map(function (g) {
+      var row = h('div', { class: 'pills' }, g[2].map(function (o) {
+        var b = h('button', { type: 'button', class: 'pill' + (pick[g[0]] === o[0] ? ' on' : ''), text: o[1], raw: 1 });
+        b.addEventListener('click', function () { pick[g[0]] = o[0]; row.querySelectorAll('.pill').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+        return b;
+      }));
+      return h('div', { class: 'pgroup' }, h('p', { class: 'label', text: g[1] }), row);
+    });
     var ok = function () {
-      S.settings = Object.assign({}, S.settings, { name: name.value.trim(), about: about.value.trim(), style: style, extra: extra.value.trim() });
-      save(); closeSheet(); toast('сохранено');
+      var next = { name: name.value.trim(), role: role.value.trim(), about: about.value.trim(), extra: extra.value.trim() };
+      PERS.forEach(function (g) { next[g[0]] = pick[g[0]]; });
+      S.settings = Object.assign({}, S.settings, next);
+      save(); closeSheet(); toast('Сохранено');
     };
-    openSheet([backLink(openMenu), h('h2', { text: 'персонализация' }),
-      h('p', { class: 'cap', text: 'ии учитывает это во всех чатах. хранится только на твоём телефоне и отправляется вместе с вопросом.' }),
-      h('div', { class: 'form' },
-        h('p', { class: 'label', text: 'имя' }), name,
-        h('p', { class: 'label', text: 'о тебе' }), about,
-        h('p', { class: 'label', text: 'длина ответов' }), seg,
-        h('p', { class: 'label', text: 'свои инструкции' }), extra,
-        h('button', { class: 'btn solid block', type: 'button', text: 'сохранить', onclick: ok }))]);
+    var reset = twice('Сбросить настройки', 'Точно сбросить? Нажми ещё раз', function () {
+      var keep = { memOn: S.settings.memOn, memory: S.settings.memory };
+      S.settings = Object.assign({ name: '', about: '', style: 'normal', extra: '' }, keep); save(); closeSheet(); toast('Сброшено');
+    }, 'danger');
+    openSheet([
+      h('div', { class: 'shead2' }, (function () { var x = h('button', { class: 'round-x', type: 'button', 'aria-label': 'назад' }, icon('close')); x.addEventListener('click', function () { if (wide()) closeSheet(); else openMenu(); }); return x; })(), h('h2', { text: 'Персонализация' }), h('span', { class: 'sp' })),
+      h('p', { class: 'cap', text: 'ИИ учитывает это во всех чатах. Хранится только на твоём устройстве и отправляется вместе с вопросом.' }),
+      h('p', { class: 'glabel', text: 'Обо мне' }),
+      h('div', { class: 'form' }, name, role, about),
+      h('p', { class: 'glabel', text: 'Как отвечать' }),
+      h('div', { class: 'group pad pgroups' }, blocks),
+      h('p', { class: 'glabel', text: 'Свои правила' }),
+      h('div', { class: 'form' }, extra),
+      h('button', { class: 'btn solid block', type: 'button', text: 'Сохранить', onclick: ok }),
+      reset
+    ], true);
   }
-  // то, что уходит в воркер вместе с вопросом
   function buildInstructions(c) {
     var st = S.settings, out = [];
     if (st.name) out.push('Пользователя зовут ' + st.name + '.');
+    if (st.role) out.push('Чем занимается пользователь: ' + st.role + '.');
     if (st.about) out.push('О пользователе: ' + st.about);
-    if (st.style === 'short') out.push('Отвечай максимально коротко.');
-    if (st.style === 'long') out.push('Отвечай подробно, с пояснениями и примерами.');
+    PERS.forEach(function (g) {
+      var v = st[g[0]] != null ? st[g[0]] : (g[0] === 'style' ? 'normal' : '');
+      g[2].forEach(function (o) { if (o[0] === v && o[2]) out.push(o[2]); });
+    });
     if (st.extra) out.push('Пожелания пользователя к ответам: ' + st.extra);
     if (st.memOn !== false && st.memory && st.memory.length) out.push('Память о пользователе (учитывай, но не упоминай без повода): ' + st.memory.join('; ').slice(0, 700));
     var pr = projectById(c ? c.project : null);
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
-    out.push('Не используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /).');
-    return out.join('\n').slice(0, 1990);
+    var tail = '\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /).';
+    return out.join('\n').slice(0, 1990 - tail.length) + tail;
   }
 
 
