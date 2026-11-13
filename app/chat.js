@@ -74,6 +74,7 @@
     tag: '<path d="M4 12.2V6.5A2.5 2.5 0 0 1 6.5 4h5.7a2 2 0 0 1 1.4.6l6 6a2 2 0 0 1 0 2.8l-5.2 5.2a2 2 0 0 1-2.8 0l-6-6a2 2 0 0 1-.6-1.4z"/><circle cx="8.6" cy="8.6" r="1.2"/>',
     brain: '<path d="M9.5 4.5A3 3 0 0 0 6.6 7 3.2 3.2 0 0 0 5 10a3.2 3.2 0 0 0 1.2 2.5A3.2 3.2 0 0 0 7 16a3 3 0 0 0 2.6 2.4A2.5 2.5 0 0 0 12 20V6.5a2 2 0 0 0-2.5-2z"/><path d="M14.5 4.5A3 3 0 0 1 17.4 7 3.2 3.2 0 0 1 19 10a3.2 3.2 0 0 1-1.2 2.5A3.2 3.2 0 0 1 17 16a3 3 0 0 1-2.6 2.4A2.5 2.5 0 0 1 12 20V6.5a2 2 0 0 1 2.5-2z"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
+    chatb: '<path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v6A2.5 2.5 0 0 1 16.5 15H11l-4 4v-4h-.5A2.5 2.5 0 0 1 4 12.5z"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
     more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
@@ -638,6 +639,7 @@
   function updateHeader() {
     var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
     $('#title').textContent = c ? c.title : 'DDX AI'; $('#title').classList.toggle('is-brand', !c);
+    if (tabNow === 'projects') { $('#title').textContent = 'Проекты'; $('#title').classList.remove('is-brand'); }
     var has = !!(c && c.msgs.length); $('#more').style.display = '';
     $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
     var capText = cap(pr
@@ -838,12 +840,13 @@
 
   /* ---------- чаты, проекты, закрепление ---------- */
   function newChat(projectId) {
+    setTab('chat');
     greet = '';
     S.cur = null; S.pendingProject = projectId || null; clearError(); atts = []; renderAtts();
     save(); renderAll(); syncSend(); scroller.scrollTop = 0;
     if (!coarse) ta.focus();
   }
-  function openChat(id) { S.cur = id; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
+  function openChat(id) { setTab('chat'); S.cur = id; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
   function ensureChat() {
     var c = curChat();
     if (c) return c;
@@ -973,7 +976,7 @@
   document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); } });
 
   var sideUI = null;
-  function refreshSide() { if (sideUI) sideUI.fill(); }
+  function refreshSide() { if (sideUI) sideUI.fill(); if (tabNow === 'projects') renderProjects(); }
   // после действия над чатом: на телефоне вернуться к списку, на компьютере закрыть окно (список слева уже виден)
   function listsHome() { closeSheet(); refreshSide(); }
 
@@ -2821,6 +2824,37 @@
   ta.addEventListener('keydown', function (e) {
     // на компьютере enter отправляет, shift+enter новая строка; на телефоне enter это новая строка
     if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.isComposing && S.settings.enterSend !== false) { e.preventDefault(); send(); }
+  });
+
+  /* ---------- нижние вкладки: Чат и Проекты ---------- */
+  var tabNow = 'chat', tabsEl = $('#tabs'), pview = $('#pview'), appEl = document.querySelector('.app');
+  function renderProjects() {
+    var box = h('div', { class: 'pbox' });
+    if (!S.projects.length) {
+      box.append(h('div', { class: 'pempty' }, icon('folder'), h('p', { class: 'pe-t', text: 'Проектов пока нет' }),
+        h('p', { class: 'cap', text: 'Проект собирает чаты по одной теме и даёт ИИ общие инструкции и файлы.' }),
+        h('button', { class: 'btn solid', type: 'button', text: 'Создать проект', onclick: function () { projectForm(null); } })));
+    } else {
+      S.projects.forEach(function (p) { folderRow(p, box); });
+      box.append(h('button', { class: 'btn block ghost', type: 'button', text: '+ Новый проект', onclick: function () { projectForm(null); } }));
+    }
+    pview.replaceChildren(h('div', { class: 'pwrap' }, box));
+  }
+  function setTab(t) {
+    if (!tabsEl) return;
+    if (t !== 'chat' && t !== 'projects') t = 'chat';
+    var was = tabNow; tabNow = t;
+    if (tabsEl) Array.prototype.forEach.call(tabsEl.children, function (b) { var on = b.getAttribute('data-t') === t; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false'); });
+    if (was === t && t === 'chat') return;
+    appEl.classList.toggle('tab-p', t === 'projects');
+    $('#view').hidden = t === 'projects'; $('#composer').hidden = t === 'projects'; pview.hidden = t !== 'projects';
+    if (t === 'projects') renderProjects(); else showHero();
+    updateHeader(); measure();
+  }
+  [['chat', 'Чат', 'chatb'], ['projects', 'Проекты', 'folder']].forEach(function (x) {
+    var b = h('button', { class: 'tab' + (x[0] === 'chat' ? ' on' : ''), type: 'button', 'data-t': x[0], 'aria-current': x[0] === 'chat' ? 'page' : 'false' }, icon(x[2]), h('span', { text: x[1] }));
+    b.addEventListener('click', function () { if (tabNow === x[0] && x[0] === 'chat') { toBottom(true); return; } setTab(x[0]); });
+    tabsEl.append(b);
   });
 
   /* ---------- кнопка «вниз» ---------- */
