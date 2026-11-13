@@ -475,3 +475,26 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
 .md .tbl { max-width: 100%; }
 .md img { max-width: 100%; }
 html, body { overflow-x: clip; }
+
+/* файлы, голос, поиск в чате */
+#menu { display: none; }
+.att.doc { width: auto; max-width: 200px; display: flex; align-items: center; gap: 8px; padding: 0 34px 0 12px; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; }
+.att.doc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.att.doc svg.i { width: 18px; height: 18px; flex: none; color: var(--silver); }
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.fchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px; border-radius: 10px; background: var(--card2); font-size: 13px; }
+.fchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fchip svg.i { width: 15px; height: 15px; flex: none; color: var(--silver); }
+.cap-in .ib.mic { color: var(--ink); }
+.cap-in .ib.mic.rec { background: var(--err); color: #fff; animation: recp 1.2s ease-in-out infinite; }
+@keyframes recp { 50% { opacity: .6; } }
+.cap-in .ib.go[data-mode="stop"] { background: var(--ink); }
+.findbar { position: absolute; z-index: 13; top: calc(100% - 6px); left: 12px; right: 12px; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--card2); border: 1px solid var(--line-top); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.findbar .field { flex: 1; min-width: 0; min-height: 38px; background: none; border: 0; padding: 0; }
+.findbar .field:focus { outline: none; }
+.fcnt { font-size: 12.5px; color: var(--mute); white-space: nowrap; }
+.fbtn { width: 36px; height: 36px; flex: none; display: grid; place-items: center; background: none; border: 0; border-radius: 10px; color: var(--ink); }
+.fbtn svg.i { width: 19px; height: 19px; }
+mark.hl { background: rgb(var(--w) / .3); color: inherit; border-radius: 3px; padding: 0 1px; }
+mark.hl.cur { background: var(--paper); color: var(--on-paper); }
+@media (min-width: 900px) { .findbar { left: 50%; right: auto; width: min(560px, 90%); transform: translateX(-50%); } }

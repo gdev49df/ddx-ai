@@ -40,6 +40,8 @@
         <h1 id="title">DDX AI</h1>
       </div>
       <div class="bar-r">
+        <button class="icon-btn" id="find" type="button" aria-label="поиск в чате" style="display:none"></button>
+        <button class="icon-btn" id="more" type="button" aria-label="действия с чатом" style="display:none"></button>
         <button class="icon-btn" id="newchat" type="button" aria-label="новый чат"></button>
         <button class="icon-btn" id="menu" type="button" aria-label="настройки"></button>
       </div>
@@ -62,13 +64,14 @@
     <div class="card">
       <div class="atts" id="atts" hidden></div>
       <div class="cap-in">
-        <button class="ib pick" id="pick" type="button" aria-label="прикрепить фото"></button>
+        <button class="ib pick" id="pick" type="button" aria-label="прикрепить фото или файл"></button>
         <textarea class="field" id="t" rows="1" placeholder="спроси что угодно" enterkeyhint="send" aria-label="сообщение"></textarea>
+        <button class="ib mic" id="mic" type="button" aria-label="голосовой ввод"></button>
         <button class="ib go" id="send" type="button" aria-label="отправить" disabled></button>
       </div>
     </div>
   </div>
-  <input type="file" id="file" accept="image/*" multiple hidden>
+  <input type="file" id="file" accept="image/*,.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.cs,.go,.rs,.sql,.yml,.yaml,.ini,.srt,.tex,.docx,text/plain" multiple hidden>
 
   <div class="sheet" id="sheet" hidden><div class="sheet-panel" id="sheet-panel" role="dialog" aria-modal="true"></div></div>
   <div class="toast" id="toast" role="status" hidden></div>
