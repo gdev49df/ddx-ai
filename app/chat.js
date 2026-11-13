@@ -2921,19 +2921,30 @@
   window.addEventListener('resize', measure);
 
   // высота клавиатуры: строка ввода едет вместе с ней
+  function kbSet() {
+    var ae = document.activeElement, typingNow = !!ae && /^(input|textarea)$/i.test(ae.tagName || '');
+    var v = 0;
+    if (window.visualViewport && typingNow && window.visualViewport.scale < 1.02) {
+      var vp = window.visualViewport; v = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
+    }
+    document.documentElement.style.setProperty('--kb', v + 'px');
+    if (!typingNow) document.body.classList.remove('typing');
+  }
+  // после закрытия клавиатуры iOS иногда оставляет страницу сдвинутой вверх: возвращаем и пересчитываем несколько раз
+  function kbSettle() {
+    [0, 120, 350, 700].forEach(function (d) { setTimeout(function () { kbSet(); if (!document.body.classList.contains('typing') && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0); }, d); });
+  }
   if (window.visualViewport) {
     var vv = window.visualViewport, raf = 0;
-    var kb = function () {
-      if (raf) return;
-      raf = requestAnimationFrame(function () {
-        raf = 0;
-        document.documentElement.style.setProperty('--kb', Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + 'px');
-      });
-    };
+    var kb = function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; kbSet(); }); };
     vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb); window.addEventListener('scroll', kb, { passive: true }); kb();
   }
+  window.addEventListener('orientationchange', kbSettle);
+  window.addEventListener('pageshow', kbSettle);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) kbSettle(); });
+  document.addEventListener('focusout', kbSettle);
   ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(function () { toBottom(true); }, 320); });
-  ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); }, 60); });
+  ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); kbSettle(); }, 60); });
 
   // горячие клавиши на компьютере: ctrl/cmd+k поиск по чатам, / в поле ввода, ctrl/cmd+shift+o не трогаем (занято браузером)
   document.addEventListener('keydown', function (e) {
