@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.7';
+  var VERSION = 'v1.8';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -621,7 +621,7 @@
         nav('search', 'поиск', showSearch, 'snav-search'),
         nav('folder', 'новый проект', function () { setDrawer(false); projectForm(null); }),
         nav('user', 'персонализация', function () { setDrawer(false); openPersonal(); }),
-        nav('star', 'подписки', function () { setDrawer(false); openPlans(); })),
+        nav('star', 'тарифы', function () { setDrawer(false); openPlans(); })),
       searchBox, body, foot, h('p', { class: 'sver', text: VERSION, raw: 1 }));
     sideUI = { input: input, fill: fill, show: showSearch };
   }
@@ -702,7 +702,7 @@
       h('h2', { text: c.title }),
       h('p', { class: 'cap', text: (pr ? 'проект «' + pr.name + '» · ' : '') + c.msgs.length + ' сообщ.' }),
       h('div', { class: 'form' },
-        opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { c.pinned = !c.pinned; save(); listsHome(); }),
+        opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { togglePin(c); listsHome(); }),
         opt('переименовать', 'edit', function () { renameChat(c); }),
         opt(pr ? 'перенести в другой проект' : 'в проект', 'folder', function () { moveChat(c); }),
         opt('поиск в чате', 'search', function () { closeSheet(); if (S.cur !== c.id) openChat(c.id); setDrawer(false); setTimeout(openFind, 60); }),
@@ -733,6 +733,7 @@
   }
   // p: существующий проект или null (создание); moveIn: чат, который сразу положить в новый проект
   function projectForm(p, moveIn) {
+    if (!p && S.projects.length >= lim().projects) { limitToast('На тарифе ' + planWord() + ' можно создать до ' + lim().projects + ' проектов'); return; }
     var name = field('input', { type: 'text', maxlength: '40', placeholder: 'название проекта', value: p ? p.name : '', 'aria-label': 'название проекта' });
     var instr = field('textarea', { rows: '5', maxlength: '800', placeholder: 'о чём проект и как отвечать в нём. например: «готовлюсь к экзамену по трудовому праву, объясняй с примерами»', 'aria-label': 'контекст проекта' });
     instr.value = p ? p.instructions : '';
@@ -794,7 +795,21 @@
   }
 
 
-  /* ---------- подписки ---------- */
+  /* ---------- тарифы ---------- */
+  // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
+  var LIMITS = {
+    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3 },
+    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10 },
+    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9 },
+    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9 }
+  };
+  function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
+  function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
+  function limitToast(text) { toast(text + '. Больше на другом тарифе'); }
+  function togglePin(c) {
+    if (!c.pinned && S.chats.filter(function (x) { return x.pinned; }).length >= lim().pins) { limitToast('На тарифе ' + planWord() + ' можно закрепить до ' + lim().pins + ' чатов'); return false; }
+    c.pinned = !c.pinned; save(); return true;
+  }
   var PLANS = [
     { id: 'free', name: 'free', price: 0, line: '20 сообщений в день' },
     { id: 'pro', name: 'pro', price: 1090, limit: 300 },
@@ -802,6 +817,15 @@
     { id: 'ultra', name: 'ultra', price: 11990, limit: 5000, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  function featureRows(id) {
+    var L = LIMITS[id], big = function (n) { return n >= 1e9; }, rows = [
+      'Фото: до ' + L.photos + ' в сообщении',
+      'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
+      big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
+      big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins
+    ];
+    return h('div', { class: 'feat' }, rows.map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
+  }
   // цена «набегает» от нуля
   function countUp(el) {
     var to = parseInt(el.textContent.replace(/\s/g, ''), 10) || 0, t0 = performance.now(), dur = 650;
@@ -823,7 +847,7 @@
     var cards = function () {
       var made = PLANS.map(function (p, i) {
         var cur = sub ? sub.plan === p.id : p.id === 'free', k = year ? 10 : 1, total = p.price * k;
-        var msg = 'Здравствуйте! Хочу купить подписку DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(total) + ' ₸).';
+        var msg = 'Здравствуйте! Хочу купить тариф DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(total) + ' ₸).';
         var perMsg = p.limit ? '≈ ' + (total / (p.limit * k)).toFixed(1).replace('.', ',') + ' ₸ за сообщение' : '';
         var priceRow = p.price
           ? h('div', { class: 'plan-p' }, h('b', { text: money(total) }), h('i', { text: '₸' }), h('em', { text: year ? 'в год' : 'в месяц' }),
@@ -834,7 +858,7 @@
             h('span', { class: 'plan-tags' }, p.badge ? h('span', { class: 'plan-tag soft', text: p.badge }) : null, cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null)),
           priceRow,
           h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? money(p.limit * k) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line })),
-          p.limit ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: 'Фото, файлы и голосовой ввод' })) : h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: 'Фото, файлы и голосовой ввод' })),
+          featureRows(p.id),
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
           year && p.price ? h('p', { class: 'plan-save', text: '2 месяца в подарок' }) : null,
           p.price ? h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить' }) : null);
@@ -850,7 +874,7 @@
       segBtns.push(b); return b;
     }));
     cards();
-    var code = field('input', { type: 'text', placeholder: 'код подписки', 'aria-label': 'код подписки', autocapitalize: 'characters', spellcheck: 'false' });
+    var code = field('input', { type: 'text', placeholder: 'код тарифа', 'aria-label': 'код тарифа', autocapitalize: 'characters', spellcheck: 'false' });
     var note = h('p', { class: 'cap', text: 'после оплаты в ватсап пришлют код. введи его здесь.' });
     var go = h('button', { class: 'btn', type: 'button', text: 'активировать' });
     go.addEventListener('click', function () {
@@ -864,8 +888,8 @@
             subCode = v; sub = { plan: x.j.plan, period: x.j.period, exp: x.j.exp };
             ls.set(KEY_CODE, subCode); ls.set(KEY_SUB, JSON.stringify(sub));
             lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit, plan: x.j.plan }; ls.set(KEY_LEFT, JSON.stringify(lastLeft));
-            showLeft(); refreshSide(); toast('подписка ' + x.j.plan + ' включена'); openPlans(sub.period);
-          } else note.textContent = x.j.error === 'expired' ? 'эта подписка уже закончилась' : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
+            showLeft(); refreshSide(); toast('Тариф ' + x.j.plan + ' включён'); openPlans(sub.period);
+          } else note.textContent = x.j.error === 'expired' ? 'этот тариф уже закончился' : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
         }, function () { go.disabled = false; note.textContent = 'нет связи с воркером'; });
     });
     var off = sub ? twice('отключить код на этом устройстве', 'точно? нажми ещё раз', function () {
@@ -873,7 +897,7 @@
     }) : null;
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
-      h('h2', { text: 'подписки' }),
+      h('h2', { text: 'Тарифы' }),
       seg,
       plansBox,
       h('p', { class: 'label', text: 'уже купил' }),
@@ -938,7 +962,7 @@
       h('p', { class: 'glabel', text: 'Аккаунт' }),
       h('div', { class: 'group' },
         grow2('Персонализация', 'user', nm || '', openPersonal),
-        grow2('Подписка', 'star', planName, function () { openPlans(); }),
+        grow2('Тариф', 'star', planName, function () { openPlans(); }),
         grow2('Использование', 'gauge', usage, null)),
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
       h('p', { class: 'glabel', text: 'Данные' }),
@@ -993,7 +1017,7 @@
     }));
     measure();
   }
-  var DOC_RE = /\.(txt|md|markdown|csv|tsv|json|log|xml|html?|css|js|ts|py|java|c|cpp|cs|go|rs|sql|ya?ml|ini|srt|tex|docx)$/i, MAX_FILE = 15000;
+  var DOC_RE = /\.(txt|md|markdown|csv|tsv|json|log|xml|html?|css|js|ts|py|java|c|cpp|cs|go|rs|sql|ya?ml|ini|srt|tex|docx)$/i, MAX_FILE = 15000;   // потолок; реальный лимит символов зависит от тарифа: lim().chars
   function readDocx(file) {
     return file.arrayBuffer().then(function (buf) {
       var v = new DataView(buf), u8 = new Uint8Array(buf), i, eocd = -1;
@@ -1022,18 +1046,18 @@
     return (/\.docx$/i.test(file.name) ? readDocx(file) : file.text()).then(function (t) {
       t = String(t).replace(/\u0000/g, '').trim();
       if (!t) throw new Error('empty');
-      return { id: uid(), kind: 'file', name: file.name.slice(0, 60), text: t.slice(0, MAX_FILE), cut: t.length > MAX_FILE };
+      return { id: uid(), kind: 'file', name: file.name.slice(0, 60), text: t.slice(0, lim().chars), cut: t.length > lim().chars };
     });
   }
   var loading = 0;
   function addDocs(list) {
-    var room = 3 - atts.filter(function (a) { return a.kind === 'file'; }).length;
-    if (room <= 0) { toast('максимум 3 файла в одном сообщении'); return; }
+    var room = lim().files - atts.filter(function (a) { return a.kind === 'file'; }).length;
+    if (room <= 0) { limitToast('На тарифе ' + planWord() + ' до ' + lim().files + ' ' + (lim().files === 1 ? 'файла' : 'файлов') + ' в сообщении'); return; }
     list.slice(0, room).forEach(function (f) {
       loading++; syncSend();
       readDoc(f).then(function (a) {
         atts.push(a); renderAtts();
-        if (a.cut) toast('файл длинный: прочитаю первые ' + MAX_FILE + ' символов');
+        if (a.cut) toast('Файл длинный: прочитаю первые ' + money(lim().chars) + ' символов');
       }, function (e) {
         toast(e && e.message === 'nods' ? 'этот браузер не открывает docx' : e && e.message === 'empty' ? 'в файле нет текста' : 'не получилось прочитать «' + f.name + '»');
       }).then(function () { loading--; syncSend(); });
@@ -1049,8 +1073,8 @@
   function addImages(files) {
     var list = Array.prototype.slice.call(files || []).filter(function (f) { return /^image\//.test(f.type) || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name || ''); });
     if (!list.length) return;
-    var room = MAX_IMG - atts.filter(function (a) { return !a.kind; }).length - loading;
-    if (room <= 0) { toast('максимум ' + MAX_IMG + ' фото в одном сообщении'); return; }
+    var room = lim().photos - atts.filter(function (a) { return !a.kind; }).length - loading;
+    if (room <= 0) { limitToast('На тарифе ' + planWord() + ' до ' + lim().photos + ' фото в сообщении'); return; }
     if (list.length > room) { toast('взял только ' + room + ' из ' + list.length + ' фото'); list = list.slice(0, room); }
     loading += list.length; syncSend();
     Promise.all(list.map(function (f) {
@@ -1188,10 +1212,10 @@
       var plans = false;
       if (x.st === 429) {
         lastLeft = { day: dayStr(), left: 0, limit: lastLeft ? lastLeft.limit : 0, plan: j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft();
-        msg = sub ? 'лимит твоего тарифа исчерпан. можно взять тариф побольше' : 'лимит на сегодня исчерпан, завтра можно снова. или возьми подписку'; plans = true;
+        msg = sub ? 'лимит твоего тарифа исчерпан. можно взять тариф побольше' : 'лимит на сегодня исчерпан, завтра можно снова. или возьми тариф'; plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
-        msg = j.error === 'expired' ? 'подписка закончилась. можно продлить в тарифах' : 'код подписки не найден. введи его заново в тарифах';
+        msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код тарифа не найден. введи его заново в тарифах';
         subCode = ''; sub = null; ls.del ? ls.del(KEY_CODE) : ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); plans = true;
       }
       else if (x.st === 413) msg = 'фото слишком тяжёлые. убери одно или пришли поменьше';
@@ -1249,7 +1273,7 @@
     var pr = projectById(c.project), armed = false;
     popEl = h('div', { class: 'popmenu', role: 'menu' },
       item('Новая сессия', 'edit', function () { closePop(); newChat(c.project); }),
-      item(c.pinned ? 'Открепить' : 'Закрепить', 'pin', function () { c.pinned = !c.pinned; save(); closePop(); toast(c.pinned ? 'Чат закреплён' : 'Чат откреплён'); }),
+      item(c.pinned ? 'Открепить' : 'Закрепить', 'pin', function () { closePop(); if (togglePin(c)) toast(c.pinned ? 'Чат закреплён' : 'Чат откреплён'); }),
       item('Поделиться', 'share', function () { closePop(); shareText(chatText(c), c.title); }),
       item('Переименовать', 'tag', function () { closePop(); renameChat(c); }),
       item(pr ? 'Перенести в проект' : 'Добавить в проект', 'folder', function () { closePop(); moveChat(c); }),

@@ -616,3 +616,4 @@ mark.hl.cur { background: var(--paper); color: var(--on-paper); }
 #more svg.i { transition: transform .4s var(--spring); }
 #more.on svg.i { transform: scale(1.12); }
 @media (hover: hover) { .pi:hover { background: rgb(var(--w) / .07); } .pi.danger:hover { background: rgb(255 138 128 / .12); } }
+.feat { display: grid; }
