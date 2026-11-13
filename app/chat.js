@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.3';
+  var VERSION = 'v1.4';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -14,12 +14,17 @@
   var $ = function (s) { return document.querySelector(s); };
 
   /* ---------- мелкие помощники ---------- */
+  // первая буква подписей интерфейса заглавная (код, ссылки и текст пользователя не трогаем)
+  var NOCAP = { strong: 1, em: 1, code: 1, a: 1, pre: 1, mark: 1 };
+  function cap(v) { v = String(v); return /^[a-zа-яё]/.test(v) ? v.charAt(0).toUpperCase() + v.slice(1) : v; }
   function h(tag, attrs) {
     var el = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function (k) {
       var v = attrs[k];
       if (v == null || v === false) return;
-      if (k === 'text') el.textContent = v;
+      if (k === 'raw') return;
+      if (k === 'text') el.textContent = (NOCAP[tag] || attrs.raw) ? v : cap(v);
+      else if (k === 'placeholder') el.setAttribute(k, cap(v));
       else if (k === 'class') el.className = v;
       else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? '' : v);
@@ -272,13 +277,13 @@
         el.append(grid);
       }
       if (m.files && m.files.length) el.append(h('div', { class: 'fchips' }, m.files.map(function (f) { return h('span', { class: 'fchip' }, icon('file'), h('span', { text: f.name })); })));
-      if (m.text) el.append(h('p', { text: m.text }));
+      if (m.text) el.append(h('p', { text: m.text, raw: 1 }));
       if (fresh) el.classList.add('rise');
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
       var copy = h('button', { class: 'link', type: 'button' }, icon('copy'), h('span', { text: 'копировать' }));
       copy.addEventListener('click', function () {
-        var done = function () { copy.replaceChildren(icon('check'), h('span', { text: 'скопировано' })); setTimeout(function () { copy.replaceChildren(icon('copy'), h('span', { text: 'копировать' })); }, 1600); };
+        var done = function () { copy.replaceChildren(icon('check'), h('span', { text: 'скопировано' })); copy.classList.add('pop'); setTimeout(function () { copy.classList.remove('pop'); }, 700); setTimeout(function () { copy.replaceChildren(icon('copy'), h('span', { text: 'копировать' })); }, 1600); };
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text).then(done, function () { toast('не получилось скопировать'); });
         else toast('копирование недоступно');
       });
@@ -306,10 +311,10 @@
     var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
     $('#title').textContent = c ? c.title : 'DDX AI';
     var has = !!(c && c.msgs.length); $('#find').style.display = has ? '' : 'none'; $('#more').style.display = has ? '' : 'none';
-    $('#kicker').textContent = pr ? pr.name : (c ? 'чат' : 'личный помощник');
-    $('#hero-cap').textContent = pr
+    $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
+    $('#hero-cap').textContent = cap(pr
       ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
-      : (greet || (greet = pickGreeting())) + ' спроси что угодно или пришли фото.';
+      : (greet || (greet = pickGreeting())) + ' спроси что угодно или пришли фото.');
   }
   function showHero() { hero.hidden = !!(curMsgs().length || thinkEl); }
   function renderAll() {
@@ -327,7 +332,7 @@
     if (!lastLeft) { el.hidden = true; return; }
     el.hidden = false;
     var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
-    el.textContent = (paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений на сегодня: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (paid ? (sub.period === 'year' ? ' на год' : ' в этом месяце') : '');
+    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений на сегодня: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (paid ? (sub.period === 'year' ? ' на год' : ' в этом месяце') : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
   }
 
@@ -369,7 +374,7 @@
 
   var toastTimer = 0;
   function toast(text) {
-    var t = $('#toast'); t.textContent = text; t.hidden = false;
+    var t = $('#toast'); t.textContent = cap(text); t.hidden = false;
     t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
   }
@@ -393,7 +398,7 @@
     });
     return b;
   }
-  function backLink(fn) { return h('button', { class: 'link back', type: 'button', text: '← назад', onclick: fn }); }
+  function backLink(fn) { return h('button', { class: 'link back', type: 'button', text: '← Назад', onclick: fn }); }
   function field(tag, attrs) { return h(tag, Object.assign({ class: tag === 'textarea' ? 'area' : 'field', autocomplete: 'off', autocapitalize: 'off' }, attrs)); }
   var byUpdated = function (a, b) { return b.updated - a.updated; };
 
@@ -421,7 +426,7 @@
   function chatRow(c) {
     var pr = projectById(c.project);
     var main = h('button', { class: 'row-main', type: 'button', onclick: function () { openChat(c.id); closeSheet(); } },
-      h('span', { class: 'row-t', text: c.title }), h('span', { class: 'row-m', text: (pr ? pr.name + ' · ' : '') + when(c.updated) }));
+      h('span', { class: 'row-t', text: c.title, raw: 1 }), h('span', { class: 'row-m', text: (pr ? pr.name + ' · ' : '') + when(c.updated) }));
     var more = h('button', { class: 'row-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
     more.addEventListener('click', function () { chatMenu(c); });
     return h('div', { class: 'row' + (c.id === S.cur ? ' cur' : '') }, c.pinned ? h('span', { class: 'row-pin' }, icon('pin')) : null, main, more);
@@ -545,7 +550,7 @@
     var srow = function (c, pin) {
       var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
       more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
-      var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title }));
+      var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title, raw: 1 }));
       main.addEventListener('click', function () { openChat(c.id); closeSheet(); setDrawer(false); });
       return h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : '') }, main, more);
     };
@@ -578,7 +583,7 @@
           chats.forEach(function (c) { kids.append(srow(c, false)); });
           kids.append(h('button', { class: 'snew', type: 'button', text: '+ чат в проекте', onclick: function () { newChat(p.id); closeSheet(); setDrawer(false); } }));
           var ch = h('span', { class: 'ch' + (S.open[p.id] ? ' open' : '') }, icon('down'));
-          var main = h('button', { class: 'srow-main', type: 'button' }, icon('folder'), h('span', { text: p.name }), ch);
+          var main = h('button', { class: 'srow-main', type: 'button' }, icon('folder'), h('span', { text: p.name, raw: 1 }), ch);
           main.addEventListener('click', function () { S.open[p.id] = !S.open[p.id]; save(); kids.hidden = !S.open[p.id]; ch.classList.toggle('open', !!S.open[p.id]); });
           var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'проект' }, icon('more'));
           more.addEventListener('click', function (e) { e.stopPropagation(); projectForm(p); });
@@ -592,7 +597,7 @@
       var nm = (S.settings.name || '').trim();
       foot.replaceChildren(
         h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
-        h('span', { class: 'sname', text: nm || 'DDX AI' }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''),
+        h('span', { class: 'sname', text: nm || 'DDX AI', raw: 1 }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''),
         h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })),
         (function () { var g = h('button', { class: 'srow-more on', type: 'button', 'aria-label': 'меню' }, icon('gear')); g.addEventListener('click', function () { setDrawer(false); openMenu(); }); return g; })());
     };
@@ -607,7 +612,7 @@
         nav('folder', 'новый проект', function () { setDrawer(false); projectForm(null); }),
         nav('user', 'персонализация', function () { setDrawer(false); openPersonal(); }),
         nav('star', 'подписки', function () { setDrawer(false); openPlans(); })),
-      searchBox, body, foot, h('p', { class: 'sver', text: VERSION }));
+      searchBox, body, foot, h('p', { class: 'sver', text: VERSION, raw: 1 }));
     sideUI = { input: input, fill: fill, show: showSearch };
   }
 
@@ -668,7 +673,7 @@
           pos = 0;
         });
       });
-      if (!marks.length) { cnt.textContent = 'нет совпадений'; return; }
+      if (!marks.length) { cnt.textContent = 'Нет совпадений'; return; }
       markAt = marks.length - 1; go(1);
     };
     var btn = function (ic, label, fn) { var b = h('button', { class: 'fbtn', type: 'button', 'aria-label': label }, icon(ic)); b.addEventListener('click', fn); return b; };
@@ -781,29 +786,43 @@
 
   /* ---------- подписки ---------- */
   var PLANS = [
-    { id: 'free', name: 'free', price: 0, line: '20 сообщений в день', year: '' },
+    { id: 'free', name: 'free', price: 0, line: '20 сообщений в день' },
     { id: 'pro', name: 'pro', price: 1090, limit: 300 },
-    { id: 'max', name: 'max', price: 5990, limit: 1500 },
-    { id: 'ultra', name: 'ultra', price: 11990, limit: 5000 }
+    { id: 'max', name: 'max', price: 5990, limit: 1500, badge: 'популярный', hot: true },
+    { id: 'ultra', name: 'ultra', price: 11990, limit: 5000, badge: 'выгодно' }
   ];
-  var money = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function openPlans(period) {
     var year = period === 'year';
+    var plansBox = h('div', { class: 'plans' }), segBtns = [];
+    var cards = function () {
+      plansBox.replaceChildren.apply(plansBox, PLANS.map(function (p, i) {
+        var cur = sub ? sub.plan === p.id : p.id === 'free', k = year ? 10 : 1, total = p.price * k;
+        var msg = 'Здравствуйте! Хочу купить подписку DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(total) + ' ₸).';
+        var perMsg = p.limit ? '≈ ' + (total / (p.limit * k)).toFixed(1).replace('.', ',') + ' ₸ за сообщение' : '';
+        var priceRow = p.price
+          ? h('div', { class: 'plan-p' }, h('b', { text: money(total) }), h('i', { text: '₸' }), h('em', { text: year ? 'в год' : 'в месяц' }),
+              year ? h('s', { text: money(p.price * 12) + ' ₸' }) : null)
+          : h('div', { class: 'plan-p' }, h('b', { text: '0' }), h('i', { text: '₸' }), h('em', { text: 'навсегда' }));
+        return h('div', { class: 'plan' + (cur ? ' cur' : '') + (p.hot ? ' hot' : ''), style: 'animation-delay:' + (i * 70) + 'ms' },
+          h('div', { class: 'plan-h' }, h('span', { class: 'plan-n', text: p.name }),
+            h('span', { class: 'plan-tags' }, p.badge ? h('span', { class: 'plan-tag soft', text: p.badge }) : null, cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null)),
+          priceRow,
+          h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? money(p.limit * k) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line })),
+          p.limit ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: 'Фото, файлы и голосовой ввод' })) : h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: 'Фото, файлы и голосовой ввод' })),
+          perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
+          year && p.price ? h('p', { class: 'plan-save', text: '2 месяца в подарок' }) : null,
+          p.price ? h('a', { class: 'btn solid block buy', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'Купить' }) : null);
+      }));
+    };
     var seg = h('div', { class: 'seg two' }, [['month', 'месяц'], ['year', 'год · ×10']].map(function (x) {
       var b = h('button', { type: 'button', class: (x[0] === 'year') === year ? 'on' : '', text: x[1] });
-      b.addEventListener('click', function () { openPlans(x[0]); });
-      return b;
+      b.addEventListener('click', function () {
+        year = x[0] === 'year'; segBtns.forEach(function (o, j) { o.classList.toggle('on', (j === 1) === year); }); cards();
+      });
+      segBtns.push(b); return b;
     }));
-    var cards = PLANS.map(function (p) {
-      var cur = sub ? sub.plan === p.id : p.id === 'free';
-      var price = p.price ? money(p.price * (year ? 10 : 1)) + ' ₸ / ' + (year ? 'год' : 'месяц') : 'бесплатно';
-      var line = p.limit ? money(p.limit * (year ? 10 : 1)) + (year ? ' сообщений на год' : ' сообщений в месяц') : p.line;
-      var msg = 'Здравствуйте! Хочу купить подписку DDX AI ' + p.name + ' на ' + (year ? 'год' : 'месяц') + ' (' + money(p.price * (year ? 10 : 1)) + ' ₸).';
-      return h('div', { class: 'plan' + (cur ? ' cur' : '') },
-        h('div', { class: 'plan-h' }, h('span', { class: 'plan-n', text: p.name }), cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null),
-        h('p', { class: 'plan-p', text: price }), h('p', { class: 'plan-l', text: line }),
-        p.price ? h('a', { class: 'btn solid block', href: 'https://wa.me/' + WA + '?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener', text: 'купить' }) : null);
-    });
+    cards();
     var code = field('input', { type: 'text', placeholder: 'код подписки', 'aria-label': 'код подписки', autocapitalize: 'characters', spellcheck: 'false' });
     var note = h('p', { class: 'cap', text: 'после оплаты в ватсап пришлют код. введи его здесь.' });
     var go = h('button', { class: 'btn', type: 'button', text: 'активировать' });
@@ -829,7 +848,7 @@
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
       h('h2', { text: 'подписки' }),
       seg,
-      h('div', { class: 'plans' }, cards),
+      plansBox,
       h('p', { class: 'label', text: 'уже купил' }),
       h('div', { class: 'row-in' }, code, go), note, off], true);
   }
@@ -1001,6 +1020,9 @@
   /* ---------- отправка ---------- */
   function syncSend() {
     sendBtn.disabled = !busy && (loading > 0 || (!ta.value.trim() && !atts.length));
+    var was = sendBtn.getAttribute('data-dis');
+    sendBtn.setAttribute('data-dis', sendBtn.disabled ? '1' : '0');
+    if (was === '1' && !sendBtn.disabled) { sendBtn.classList.remove('pop'); void sendBtn.offsetWidth; sendBtn.classList.add('pop'); }
     var mode = busy ? 'stop' : 'arrowup';
     if (sendBtn.getAttribute('data-mode') !== mode) { sendBtn.setAttribute('data-mode', mode); sendBtn.replaceChildren(icon(mode)); sendBtn.setAttribute('aria-label', busy ? 'остановить' : 'отправить'); }
   }
@@ -1119,6 +1141,20 @@
     // на компьютере enter отправляет, shift+enter новая строка; на телефоне enter это новая строка
     if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.isComposing) { e.preventDefault(); send(); }
   });
+
+  /* ---------- кнопка «вниз» ---------- */
+  var downBtn = h('button', { class: 'downbtn', type: 'button', 'aria-label': 'вниз' }, icon('down'));
+  document.body.append(downBtn);
+  downBtn.addEventListener('click', function () { toBottom(true); });
+  var downTick = 0;
+  window.addEventListener('scroll', function () {
+    if (downTick) return;
+    downTick = requestAnimationFrame(function () {
+      downTick = 0;
+      var far = document.documentElement.scrollHeight - window.scrollY - window.innerHeight > 420;
+      downBtn.classList.toggle('show', far && !!curMsgs().length);
+    });
+  }, { passive: true });
 
   /* ---------- шапка, подсказки, клавиатура, заставка ---------- */
   $('#ver').textContent = 'DDX AI ' + VERSION;
