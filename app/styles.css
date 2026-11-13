@@ -1222,3 +1222,55 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 .sugg { padding-bottom: 6px; }
 .composer .card .tchip { transition: background .25s, color .25s, border-color .25s; }
 .fade { background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg) 85%, transparent) 60%, var(--bg)); }
+
+/* ===== v3: Apple-подход. тёмная палитра прежняя. пружины, материалы, оптическая типографика ===== */
+:root {
+  --spring-1: linear(0, 0.0446, 0.1443, 0.2642, 0.3849, 0.4963, 0.594, 0.6768, 0.7452, 0.8009, 0.8454, 0.8807, 0.9084, 0.93, 0.9467, 0.9596, 0.9694, 0.9769, 0.9826, 0.987, 0.9902, 0.9927, 0.9946, 0.9959, 0.997, 0.9978, 0.9983, 0.9988);      /* демпфирование 1.0: без перелёта, по умолчанию */
+  --spring-8: linear(0, 0.0667, 0.2137, 0.3848, 0.548, 0.6874, 0.7977, 0.8794, 0.9366, 0.9739, 0.9966, 1.0088, 1.0141, 1.0151, 1.0139, 1.0115, 1.0089, 1.0065, 1.0045, 1.0029, 1.0017, 1.0009, 1.0003, 1, 0.9998, 0.9998, 0.9998, 0.9998);     /* демпфирование 0.8: лёгкий перелёт, когда в жесте был импульс */
+}
+
+/* отклик: нажатие видно сразу, возврат плавный */
+.btn, .chip, .tchip, .icon-btn, .cap-in .ib, .srow-main, .snav, .shead, .msg-actions .ab, .mitem { transition-property: transform, background, color, border-color, opacity, box-shadow; transition-duration: .5s, .3s, .3s, .3s, .3s, .3s; transition-timing-function: var(--spring-8), ease, ease, ease, ease, ease; }
+.btn:active, .chip:active, .tchip:active, .icon-btn:active, .cap-in .ib:active, .mitem:active, .snav:active, .srow-main:active { transform: scale(.96); transition-duration: .08s; transition-timing-function: ease-out; }
+
+/* пружины на шторках, панели и меню: появление одним движением, возврат с лёгким перелётом */
+.sheet-panel { transition: transform .75s var(--spring-8); }
+.side.open, .side.drag { transition: transform .6s var(--spring-1), visibility 0s; }
+.side { transition: transform .5s var(--spring-1), visibility 0s .5s; }
+.modelpop, .menu-pop, .pop { transform-origin: bottom right; }
+.msg.me.rise { animation-timing-function: var(--spring-8); }
+
+/* материалы: толщина зависит от размера поверхности, яркий верхний край как свет на стекле */
+.composer .card, .modelpop { border-top-color: rgb(var(--w) / .24); }
+.sheet-panel { -webkit-backdrop-filter: blur(34px) saturate(1.4); backdrop-filter: blur(34px) saturate(1.4); border-top-color: rgb(var(--w) / .22); }
+.side { -webkit-backdrop-filter: blur(30px) saturate(1.3); backdrop-filter: blur(30px) saturate(1.3); }
+/* край прокрутки вместо жёсткой линии под шапкой */
+.bar { border-bottom: 0; -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent); mask-image: linear-gradient(#000 calc(100% - 14px), transparent); padding-bottom: 20px; }
+
+/* типографика: трекинг зависит от размера. крупное плотнее, мелкое свободнее */
+.bar h1, .sheet h2, .hero-greet { letter-spacing: -.035em; line-height: 1.08; }
+.msg.ai .md h1 { font-size: 1.45em; letter-spacing: -.03em; line-height: 1.15; }
+.msg.ai .md h2 { font-size: 1.25em; letter-spacing: -.025em; line-height: 1.2; }
+.msg.ai .md h3 { font-size: 1.08em; letter-spacing: -.012em; }
+.msg.ai .md p, .msg.ai .md li { letter-spacing: -.003em; line-height: 1.6; }
+.cap, .label, .ptxt, .msg-actions .mtime, .tchip, .chip { letter-spacing: .008em; }
+.bar .label, .sheet .sect { letter-spacing: .1em; }
+.msg.ai { max-width: 68ch; }
+
+/* фокус для клавиатуры */
+:focus-visible { outline: 2px solid rgb(var(--w) / .7); outline-offset: 3px; border-radius: inherit; }
+
+/* доступность по Apple: уменьшение движения, прозрачности, повышенная контрастность */
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel, .side, .side.open { transition: opacity .2s ease, visibility 0s !important; transform: none !important; }
+  .btn:active, .chip:active, .icon-btn:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bar, .composer .card, .sheet-panel, .side, .modelpop, .chip, .icon-btn { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .composer .card, .sheet-panel, .side, .modelpop { background: var(--card2); }
+  .dotfield { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --line: rgba(255, 255, 255, .22); --mute: #a8a8ae; }
+  .composer .card, .sheet-panel, .md .blk, .chip { border-color: rgb(var(--w) / .4); }
+}
