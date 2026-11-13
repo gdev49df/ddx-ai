@@ -1261,10 +1261,64 @@
         opt('переименовать', 'edit', function () { renameChat(c); }),
         opt(pr ? 'перенести в другой проект' : 'в проект', 'folder', function () { moveChat(c); }),
         opt('экспорт в файл', 'file', function () { exportChat(c); }),
+        opt('экспорт в docx', 'doc', function () { closeSheet(); exportDocx(c); }),
+        opt('экспорт в pdf', 'doc', function () { closeSheet(); exportPdf(c); }),
         opt('поделиться чатом', 'share', function () { shareText(chatText(c), c.title); }),
         twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); listsHome(); }, 'danger'))
     ]);
   }
+  /* экспорт чата в docx и pdf */
+  function xmlEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ''); }
+  function docxRuns(text, base) {
+    return String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/).filter(Boolean).map(function (part) {
+      var b = base || '', t = part;
+      if (/^\*\*[^*]+\*\*$/.test(part)) { t = part.slice(2, -2); b += '<w:b/>'; }
+      else if (/^`[^`]+`$/.test(part)) { t = part.slice(1, -1); b += '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>'; }
+      return '<w:r>' + (b ? '<w:rPr>' + b + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + xmlEsc(t) + '</w:t></w:r>';
+    }).join('');
+  }
+  function docxPara(inner, ppr) { return '<w:p>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : '') + inner + '</w:p>'; }
+  function exportDocx(c) {
+    var out = [docxPara(docxRuns(c.title, '<w:b/><w:sz w:val="36"/>'), '<w:spacing w:after="240"/>')];
+    c.msgs.forEach(function (m) {
+      out.push(docxPara(docxRuns(m.role === 'user' ? 'Я' : 'DDX AI', '<w:b/><w:color w:val="' + (m.role === 'user' ? '555555' : '1F4E79') + '"/>'), '<w:spacing w:before="240" w:after="60"/>'));
+      if (m.files && m.files.length) out.push(docxPara(docxRuns('[файл: ' + m.files.map(function (f) { return f.name; }).join(', ') + ']', '<w:i/>')));
+      if (m.thumbs && m.thumbs.length) out.push(docxPara(docxRuns('[фото]', '<w:i/>')));
+      var code = false;
+      String(m.text || '').replace(/\r/g, '').split('\n').forEach(function (ln) {
+        if (/^\s*```/.test(ln)) { code = !code; return; }
+        if (code) { out.push(docxPara('<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(ln) + '</w:t></w:r>', '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/><w:spacing w:after="0"/>')); return; }
+        if (!ln.trim()) return;
+        var hd = /^\s*#{1,6}\s+(.*)$/.exec(ln);
+        if (hd) { out.push(docxPara(docxRuns(hd[1], '<w:b/><w:sz w:val="26"/>'), '<w:spacing w:before="120" w:after="60"/>')); return; }
+        var li = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(ln);
+        if (li) { out.push(docxPara(docxRuns('•  ' + li[1]), '<w:ind w:left="360"/><w:spacing w:after="40"/>')); return; }
+        if (/^\s*\|[\s:|-]+\|?\s*$/.test(ln) || /^\s*:?-{3,}:?(\s*\|\s*:?-{3,}:?)+\s*$/.test(ln)) return;
+        if (ln.indexOf('|') >= 0) ln = ln.replace(/^\s*\||\|\s*$/g, '').replace(/\s*\|\s*/g, '    ');
+        out.push(docxPara(docxRuns(ln), '<w:spacing w:after="80"/>'));
+      });
+    });
+    var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + out.join('') + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>';
+    var zip = zipStore([
+      { name: '[Content_Types].xml', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+      { name: '_rels/.rels', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: 'word/document.xml', text: doc }
+    ]);
+    saveBlob((c.title || 'чат').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 50) + '.docx', new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+  }
+  function exportPdf(c) {
+    var box = document.createElement('div');
+    c.msgs.forEach(function (m) {
+      var who = document.createElement('p'); who.className = 'who ' + m.role; who.textContent = m.role === 'user' ? 'Я' : 'DDX AI'; box.append(who);
+      var d = document.createElement('div'); d.className = 'body'; d.append(m.role === 'user' ? h('p', { text: m.text || '', raw: 1 }) : mdBlock(m.text)); box.append(d);
+    });
+    var css = 'body{font:14px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;margin:0;padding:8px}h1{font-size:22px;margin:0 0 18px}.who{font-weight:700;margin:18px 0 4px;color:#1f4e79}.who.user{color:#555}.body p,.body li{margin:0 0 6px;white-space:pre-wrap}pre{background:#f3f3f3;padding:10px;border-radius:6px;white-space:pre-wrap;word-break:break-word;font-size:12px}code{font-family:Consolas,monospace}table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 8px}button,.abtn,svg{display:none}';
+    var fr = document.createElement('iframe'); fr.setAttribute('aria-hidden', 'true'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    fr.srcdoc = '<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>' + xmlEsc(c.title || 'Чат') + '</title><style>' + css + '</style></head><body><h1>' + xmlEsc(c.title || 'Чат') + '</h1>' + box.innerHTML + '</body></html>';
+    fr.onload = function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Не получилось открыть печать'); } setTimeout(function () { fr.remove(); }, 60000); };
+    document.body.append(fr); toast('Выбери «Сохранить как PDF» в окне печати');
+  }
+
   function renameChat(c) {
     var inp = field('input', { type: 'text', maxlength: '60', value: c.title, 'aria-label': 'название чата' });
     var ok = function () { var t = inp.value.trim(); if (t) { c.title = t.slice(0, 60); save(); updateHeader(); } listsHome(); };
@@ -1908,6 +1962,23 @@
       h('div', { class: 'group solo' }, del)
     ], true);
   }
+  /* вид: размер текста, ширина чата, режим чтения */
+  var FS = [['s', 'Мелкий', 0.9], ['m', 'Обычный', 1], ['l', 'Крупный', 1.15], ['xl', 'Очень крупный', 1.3]], CW = [['n', 'Узко', 620], ['m', 'Обычно', 760], ['w', 'Широко', 980]];
+  function applyLook() {
+    var st = S.settings, r = document.documentElement.style;
+    var f = FS.filter(function (x) { return x[0] === st.fs; })[0] || FS[1], w = CW.filter(function (x) { return x[0] === st.cw; })[0] || CW[1];
+    r.setProperty('--fs', String(f[2])); r.setProperty('--cw', w[2] + 'px');
+    document.documentElement.setAttribute('data-read', st.read ? '1' : '0');
+  }
+  applyLook();
+  function lookSeg(opts, key, def, short) {
+    var cur = S.settings[key] || def, seg = h('div', { class: 'seg3 seg-wrap' }, opts.map(function (x) {
+      var b = h('button', { type: 'button', class: x[0] === cur ? 'on' : '', text: short ? short[x[0]] : x[1] });
+      b.addEventListener('click', function () { S.settings[key] = x[0]; save(); applyLook(); seg.querySelectorAll('button').forEach(function (o) { o.classList.toggle('on', o === b); }); });
+      return b;
+    }));
+    return seg;
+  }
   function openGeneral() {
     if (wide() && !paneHost) { openSettingsWin('general'); return; }
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
@@ -1920,6 +1991,11 @@
       h('h2', { text: 'Общее' }),
       h('p', { class: 'glabel', text: 'Внешний вид' }),
       h('div', { class: 'group' }, h('div', { class: 'grow' }, icon('palette'), h('span', { class: 'gl', text: 'Тема' }), seg)),
+      h('p', { class: 'glabel', text: 'Текст и ширина' }),
+      h('div', { class: 'group' },
+        h('div', { class: 'grow lk' }, icon('doc'), h('span', { class: 'gl', text: 'Размер текста' }), lookSeg(FS, 'fs', 'm', { s: '90%', m: '100%', l: '115%', xl: '130%' })),
+        wide() ? h('div', { class: 'grow lk' }, icon('sort'), h('span', { class: 'gl', text: 'Ширина чата' }), lookSeg(CW, 'cw', 'm')) : null,
+        swRow('Режим чтения', 'Текст ответов шрифтом с засечками и увеличенным межстрочным интервалом.', (function () { var s = swSwitch('read', false); s.addEventListener('click', applyLook); return s; })())),
       h('p', { class: 'glabel', text: 'Язык' }),
       h('div', { class: 'group' }, grow2('Язык интерфейса', 'gear', window.I18N ? I18N.langs[I18N.get()] : 'Русский', function () { openUiLang(openGeneral); }), grow2('Язык ответов', 'chat', (langOf(S.settings.lang) ? langOf(S.settings.lang)[1] : 'Как в сообщении'), function () { openLangPicker(openGeneral); })),
       h('p', { class: 'cap', text: 'На каком языке ИИ отвечает. По умолчанию он отвечает на том языке, на котором ты пишешь.' }),
@@ -1979,6 +2055,7 @@
       h('div', { class: 'group' },
         acct ? grow2('Аккаунт', 'user', '@' + (acct.user && acct.user.login || ''), openAccount) : grow2('Войти или создать аккаунт', 'user', '', function () { openAuth('in'); }),
         grow2('Персонализация', 'user', nm || '', openPersonal),
+        grow2('Возможности', 'spark', '', openCaps),
         grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
         grow2('Skills', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
         grow2('Тариф', 'star', planName, function () { openPlans(); }),

@@ -406,7 +406,7 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
   }
   #chats { display: none; }
   .app { max-width: none; margin: 0 0 0 300px; padding: 0 32px calc(var(--cph, 72px) + 56px); }
-  .bar, #view { max-width: 760px; margin-left: auto; margin-right: auto; }
+  .bar, #view { max-width: var(--cw, 760px); margin-left: auto; margin-right: auto; }
   .bar { padding: 28px 4px 16px; background: none; isolation: isolate; }
   .bar::before {
     content: ""; position: absolute; z-index: -1; inset: 0 -40px; pointer-events: none;
@@ -414,7 +414,7 @@ button:not(:active), .card:not(:active), .chip:not(:active) { transition-timing-
     -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); mask-image: linear-gradient(180deg, #000 55%, transparent);
   }
   .bar h1 { font-size: 28px; }
-  .composer { left: 300px; right: 0; width: min(calc(100% - 300px - 64px), 760px); bottom: 24px; }
+  .composer { left: 300px; right: 0; width: min(calc(100% - 300px - 64px), var(--cw, 760px)); bottom: 24px; }
   body.typing .composer { bottom: 24px; }
   .cap-in .field { max-height: 220px; }
   .fade { left: 300px; height: calc(var(--cph, 72px) + 90px); }
@@ -1087,3 +1087,13 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
 @media (max-width: 899px) {
   .composer .card { border-top-left-radius: 16px; border-top-right-radius: 16px; }
 }
+
+/* размер текста и режим чтения */
+.msg.ai { font-size: calc(16px * var(--fs, 1)); }
+.msg.me p { font-size: calc(16px * var(--fs, 1)); }
+.msg.ai .md p, .msg.ai .md li { font-size: inherit; }
+html[data-read="1"] .msg.ai { font-family: Georgia, "Times New Roman", "Noto Serif", serif; line-height: 1.75; }
+html[data-read="1"] .msg.ai .md p, html[data-read="1"] .msg.ai .md li { line-height: 1.75; }
+html[data-read="1"] .msg.ai pre, html[data-read="1"] .msg.ai code { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.grow.lk .seg3 { margin-left: auto; }
+.seg3.seg-wrap { flex-wrap: wrap; justify-content: flex-end; }
