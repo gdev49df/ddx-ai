@@ -64,14 +64,15 @@
     <div class="card">
       <div class="atts" id="atts" hidden></div>
       <div class="cap-in">
-        <button class="ib pick" id="pick" type="button" aria-label="прикрепить фото или файл"></button>
+        <button class="ib pick" id="pick" type="button" aria-label="добавить"></button>
         <textarea class="field" id="t" rows="1" placeholder="Спроси что угодно" enterkeyhint="send" aria-label="сообщение"></textarea>
         <button class="ib mic" id="mic" type="button" aria-label="голосовой ввод"></button>
         <button class="ib go" id="send" type="button" aria-label="отправить" disabled></button>
       </div>
     </div>
   </div>
-  <input type="file" id="file" accept="image/*,.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.cs,.go,.rs,.sql,.yml,.yaml,.ini,.srt,.tex,.docx,text/plain" multiple hidden>
+  <input type="file" id="file" accept="image/*" multiple hidden>
+  <input type="file" id="docfile" accept=".txt,.md,.csv,.tsv,.json,.log,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.cs,.go,.rs,.sql,.yml,.yaml,.ini,.srt,.tex,.docx,text/plain" multiple hidden>
 
   <div class="sheet" id="sheet" hidden><div class="sheet-panel" id="sheet-panel" role="dialog" aria-modal="true"></div></div>
   <div class="toast" id="toast" role="status" hidden></div>

@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v1.8';
+  var VERSION = 'v1.9';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -64,6 +64,7 @@
     download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
     palette: '<path d="M12 4a8 8 0 1 0 0 16c1.4 0 2-.9 2-1.8 0-1.5-1.2-1.7-1.2-2.9 0-.9.7-1.5 1.7-1.5H17a3 3 0 0 0 3-3C20 6.9 16.4 4 12 4z"/><circle cx="8" cy="11" r="1"/><circle cx="11" cy="8" r="1"/><circle cx="15" cy="8.5" r="1"/>',
     tag: '<path d="M4 12.2V6.5A2.5 2.5 0 0 1 6.5 4h5.7a2 2 0 0 1 1.4.6l6 6a2 2 0 0 1 0 2.8l-5.2 5.2a2 2 0 0 1-2.8 0l-6-6a2 2 0 0 1-.6-1.4z"/><circle cx="8.6" cy="8.6" r="1.2"/>',
+    brain: '<path d="M9.5 4.5A3 3 0 0 0 6.6 7 3.2 3.2 0 0 0 5 10a3.2 3.2 0 0 0 1.2 2.5A3.2 3.2 0 0 0 7 16a3 3 0 0 0 2.6 2.4A2.5 2.5 0 0 0 12 20V6.5a2 2 0 0 0-2.5-2z"/><path d="M14.5 4.5A3 3 0 0 1 17.4 7 3.2 3.2 0 0 1 19 10a3.2 3.2 0 0 1-1.2 2.5A3.2 3.2 0 0 1 17 16a3 3 0 0 1-2.6 2.4A2.5 2.5 0 0 1 12 20V6.5a2 2 0 0 1 2.5-2z"/>',
     plus: '<path d="M12 4.5v15M4.5 12h15"/>',
     pin: '<path d="M9 4h6l-1 5 3 3v1.5H7V12l3-3z"/><path d="M12 13.5V20"/>',
     folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
@@ -98,7 +99,7 @@
 
   /* ---------- состояние ---------- */
   // S.chats: чаты, S.projects: папки с общим контекстом, S.cur: открытый чат (null: новый, ещё не создан)
-  var S = { chats: [], projects: [], cur: null, pendingProject: null, open: {}, settings: { name: '', about: '', style: 'normal', extra: '' } };
+  var S = { chats: [], projects: [], cur: null, pendingProject: null, open: {}, settings: { name: '', about: '', style: 'normal', extra: '', memOn: true, memory: [] } };
   var atts = [], busy = false, busyChat = null, thinkEl = null, errEl = null, lastLeft = null, subCode = '', sub = null;
   var device = ls.get(KEY_DEV);
   if (!device) { device = (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); ls.set(KEY_DEV, device); }
@@ -369,7 +370,7 @@
   /* ---------- листы, уведомления, просмотр фото ---------- */
   var sheet = $('#sheet'), panel = $('#sheet-panel');
   function openSheet(nodes, tall) {
-    panel.replaceChildren.apply(panel, nodes);
+    panel.replaceChildren.apply(panel, nodes.filter(Boolean));
     panel.classList.toggle('tall', !!tall);
     panel.scrollTop = 0;
     sheet.hidden = false; document.body.classList.add('lock');
@@ -768,7 +769,7 @@
       return b;
     }));
     var ok = function () {
-      S.settings = { name: name.value.trim(), about: about.value.trim(), style: style, extra: extra.value.trim() };
+      S.settings = Object.assign({}, S.settings, { name: name.value.trim(), about: about.value.trim(), style: style, extra: extra.value.trim() });
       save(); closeSheet(); toast('сохранено');
     };
     openSheet([backLink(openMenu), h('h2', { text: 'персонализация' }),
@@ -788,6 +789,7 @@
     if (st.style === 'short') out.push('Отвечай максимально коротко.');
     if (st.style === 'long') out.push('Отвечай подробно, с пояснениями и примерами.');
     if (st.extra) out.push('Пожелания пользователя к ответам: ' + st.extra);
+    if (st.memOn !== false && st.memory && st.memory.length) out.push('Память о пользователе (учитывай, но не упоминай без повода): ' + st.memory.join('; ').slice(0, 700));
     var pr = projectById(c ? c.project : null);
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
     out.push('Не используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /).');
@@ -798,10 +800,10 @@
   /* ---------- тарифы ---------- */
   // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
   var LIMITS = {
-    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3 },
-    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10 },
-    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9 },
-    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9 }
+    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 5 },
+    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 15 },
+    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30 },
+    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30 }
   };
   function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
   function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
@@ -822,7 +824,8 @@
       'Фото: до ' + L.photos + ' в сообщении',
       'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
       big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
-      big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins
+      big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins,
+      'Память: до ' + L.memory + ' записей'
     ];
     return h('div', { class: 'feat' }, rows.map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
   }
@@ -962,6 +965,7 @@
       h('p', { class: 'glabel', text: 'Аккаунт' }),
       h('div', { class: 'group' },
         grow2('Персонализация', 'user', nm || '', openPersonal),
+        grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
         grow2('Тариф', 'star', planName, function () { openPlans(); }),
         grow2('Использование', 'gauge', usage, null)),
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
@@ -973,6 +977,80 @@
       h('p', { class: 'foot center', text: 'DDX AI ' + VERSION, raw: 1 })
     ], true);
   }
+
+  /* ---------- память ---------- */
+  function addMemory(t, auto) {
+    var m = S.settings.memory || (S.settings.memory = []);
+    t = String(t || '').trim().slice(0, 200);
+    if (!t) return false;
+    if (m.indexOf(t) >= 0) { if (!auto) toast('Это уже в памяти'); return false; }
+    if (m.length >= lim().memory) { limitToast('На тарифе ' + planWord() + ' в памяти до ' + lim().memory + ' записей'); return false; }
+    m.push(t); save(); if (auto) toast('Запомнил'); return true;
+  }
+  function openMemory() {
+    var st = S.settings, list = h('div', { class: 'group memlist' }), cnt = h('span', { class: 'fcnt' });
+    var fill = function () {
+      list.replaceChildren();
+      var m = st.memory || [];
+      if (!m.length) list.append(h('p', { class: 'cap pad', text: 'Пока пусто. Напиши, например: «запомни, что я учусь на юриста».' }));
+      m.forEach(function (t, i) {
+        var x = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'забыть' }, icon('close')); x.addEventListener('click', function () { m.splice(i, 1); save(); fill(); });
+        list.append(h('div', { class: 'mem' }, h('span', { text: t, raw: 1 }), x));
+      });
+      cnt.textContent = m.length + ' из ' + lim().memory;
+    };
+    var on = h('button', { class: 'switch' + (st.memOn !== false ? ' on' : ''), type: 'button', role: 'switch', 'aria-label': 'память' }, h('i'));
+    on.addEventListener('click', function () { st.memOn = st.memOn === false; on.classList.toggle('on', st.memOn !== false); save(); });
+    var inp = field('input', { type: 'text', maxlength: '200', placeholder: 'Что запомнить', 'aria-label': 'что запомнить' });
+    var add = h('button', { class: 'btn', type: 'button', text: 'Добавить' });
+    var go = function () { if (addMemory(inp.value)) { inp.value = ''; fill(); } };
+    add.addEventListener('click', go); inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    fill();
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Память' }),
+      h('p', { class: 'cap', text: 'DDX AI учитывает это во всех чатах. Ещё можно написать в чате: «запомни, что …».' }),
+      h('div', { class: 'group' }, h('div', { class: 'grow' }, h('span', { class: 'gl', text: 'Использовать память' }), on)),
+      h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Что я помню' }), cnt),
+      list,
+      h('div', { class: 'row-in' }, inp, add),
+      twice('Очистить память', 'Точно очистить? Нажми ещё раз', function () { st.memory = []; save(); fill(); toast('Память очищена'); }, 'danger')
+    ], true);
+  }
+
+  /* ---------- меню «+» у поля ввода ---------- */
+  var plusPop = null;
+  function closePlus() { if (!plusPop) return; var p = plusPop; plusPop = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 180); $('#pick').classList.remove('on'); }
+  function pickProjectForNew() {
+    var c = curChat();
+    if (c) { moveChat(c); return; }
+    var box = h('div', { class: 'form' });
+    var put = function (label, id) {
+      var on = (S.pendingProject || null) === id;
+      var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label, raw: 1 }), on ? icon('check') : icon(id ? 'folder' : 'list'));
+      b.addEventListener('click', function () { S.pendingProject = id; updateHeader(); closeSheet(); toast(id ? 'Новый чат будет в проекте' : 'Новый чат без проекта'); });
+      box.append(b);
+    };
+    put('Без проекта', null);
+    S.projects.forEach(function (p) { put(p.name, p.id); });
+    box.append(h('button', { class: 'btn block ghost', type: 'button', text: '+ Новый проект', onclick: function () { projectForm(null); } }));
+    openSheet([h('h2', { text: 'В проект' }), box]);
+  }
+  function openPlus() {
+    if (plusPop) { closePlus(); return; }
+    var item = function (label, ic, fn) { var b = h('button', { class: 'pi', type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', function () { closePlus(); fn(); }); return b; };
+    plusPop = h('div', { class: 'popmenu up', role: 'menu' },
+      item('Фото', 'image', function () { $('#file').click(); }),
+      item('Файлы', 'file', function () { $('#docfile').click(); }),
+      item('Добавить в проект', 'folder', pickProjectForNew),
+      item('Память', 'brain', openMemory));
+    var r = $('#pick').getBoundingClientRect();
+    plusPop.style.left = Math.max(10, r.left) + 'px'; plusPop.style.bottom = (window.innerHeight - r.top + 10) + 'px';
+    document.body.append(plusPop); $('#pick').classList.add('on');
+  }
+  document.addEventListener('pointerdown', function (e) { if (plusPop && !plusPop.contains(e.target) && !e.target.closest('#pick')) closePlus(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePlus(); });
+  window.addEventListener('resize', closePlus);
 
   /* ---------- фото ---------- */
   function loadImg(src) {
@@ -1082,7 +1160,7 @@
         .then(function () { loading--; syncSend(); });
     }));
   }
-  $('#pick').append(icon('image'));
+  $('#pick').append(icon('plus'));
   // голосовой ввод: если браузер не умеет, кнопка скрыта
   (function voice() {
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#mic');
@@ -1103,8 +1181,9 @@
       try { rec.start(); } catch (e2) { rec = null; mic.classList.remove('rec'); toast('голосовой ввод недоступен'); }
     });
   })();
-  $('#pick').addEventListener('click', function () { $('#file').click(); });
+  $('#pick').addEventListener('click', openPlus);
   $('#file').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
+  $('#docfile').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
   document.addEventListener('paste', function (e) {
     var files = e.clipboardData && e.clipboardData.files;
     if (files && files.length) { var imgs = Array.prototype.filter.call(files, function (f) { return /^image\//.test(f.type); }); if (imgs.length) { e.preventDefault(); addFiles(imgs); } }
@@ -1130,6 +1209,8 @@
     text = String(text == null ? ta.value : text).trim();
     if (!text && !atts.length) return;
     clearError();
+    var mm = /^\s*запомни(?:те)?[,:]?\s+(?:что\s+)?([\s\S]{3,200})$/i.exec(text);
+    if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
     var c = ensureChat(), first = !c.msgs.length;
     var pics = atts.filter(function (a) { return !a.kind; }), docs = atts.filter(function (a) { return a.kind === 'file'; });
     var m = { id: uid(), role: 'user', text: text, thumbs: pics.map(function (a) { return a.thumb; }), full: pics.map(function (a) { return a.full; }), files: docs.map(function (a) { return { name: a.name, text: a.text }; }) };
