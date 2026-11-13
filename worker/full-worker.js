@@ -69,13 +69,15 @@ async function webSearch(env, q) {
 
 const THINK_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
 
-// линейка моделей приложения: имя, настоящие модели на groq (пробуются по очереди), глубина рассуждений, цена в сообщениях лимита и потолок ответа.
-// заменить настоящую модель можно переменной MODEL_LIAMA / MODEL_MISTRAL / MODEL_SYNAPE / MODEL_RABLE (через запятую, по порядку попыток)
+// линейка моделей приложения: имя, настоящие модели на groq (пробуются по очереди), глубина рассуждений, цена в сообщениях лимита, потолок ответа
+// и своя инструкция (prompt), которая добавляется к системной. Mistral 2.9 умнее за счёт среднего рассуждения и отдельной инструкции.
+// заменить настоящую модель можно переменной MODEL_LIAMA или MODEL_MISTRAL (через запятую, по порядку попыток)
+const MISTRAL_PROMPT = 'Режим «Mistral 2.9»: отвечай как внимательный эксперт. Прежде чем ответить, про себя разбери вопрос по шагам, проверь вычисления и логику, учти неочевидные детали и частые ошибки. '
+  + 'Давай точный, продуманный и структурированный ответ: сначала главное, затем обоснование. В сложных задачах показывай ключевые шаги решения. '
+  + 'Если данных не хватает, задай один уточняющий вопрос или назови свои допущения. Не выдумывай факты и честно отмечай, в чём не уверен.';
 const TIERS = {
-  liama:   { models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], effort: 'low', cost: 1, tokens: 1500, env: 'MODEL_LIAMA' },
-  mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 2500, env: 'MODEL_MISTRAL' },
-  synape:  { models: ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'], effort: 'high', cost: 3, tokens: 4000, env: 'MODEL_SYNAPE' },
-  rable:   { models: ['groq/compound', 'openai/gpt-oss-120b'], effort: 'high', cost: 4, tokens: 4500, env: 'MODEL_RABLE' }
+  liama:   { models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], effort: 'low', cost: 1, tokens: 1500, env: 'MODEL_LIAMA', prompt: '' },
+  mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 3000, env: 'MODEL_MISTRAL', prompt: MISTRAL_PROMPT }
 };
 
 async function chatLlm(env, models, messages, extra, opts) {
@@ -851,9 +853,9 @@ export default {
         const out = msgs.map((m, i) => (i === imgAt
           ? { role: 'user', content: [{ type: 'text', text: m.content || 'Что на этом фото?' }].concat(m.images.map((u) => ({ type: 'image_url', image_url: { url: u } }))) }
           : { role: m.role, content: m.content }));
-        // модель: liama, mistral, synape или rable; старый флаг think поднимает до synape
+        // модель: liama или mistral; старый флаг think поднимает до mistral
         let tierId = TIERS[String(body.model)] ? String(body.model) : 'liama';
-        if (body.think && TIERS[tierId].cost < 3) tierId = 'synape';
+        if (body.think && TIERS[tierId].cost < 2) tierId = 'mistral';
         const tier = TIERS[tierId];
         const cost = vision ? 1 : tier.cost;
         let gk = null, g = 0;
@@ -864,7 +866,7 @@ export default {
           if (g >= GLOBAL_DAY) return reply(503, { error: 'busy', detail: 'на сегодня общий лимит ии исчерпан, попробуй завтра' }, origin);
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
-        const think = tier.cost >= 3 && !vision;
+        const think = tier.cost >= 2 && !vision;
         const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env[tier.env], tier.models);
         // поиск в интернете: ищем по последнему вопросу и даём модели найденные выдержки
         let sources = [], sysExtra = '';
@@ -875,6 +877,7 @@ export default {
             sysExtra += 'Результаты поиска в интернете (используй их для актуальных фактов, ссылайся на номера вида [1], не выдумывай того, чего в них нет):\n' + found.map((x, i) => '[' + (i + 1) + '] ' + x.title + ' — ' + x.url + '\n' + x.text).join('\n\n');
           } else sysExtra += 'Поиск в интернете ничего не нашёл. Скажи об этом и ответь по своим знаниям, предупредив, что данные могут быть устаревшими.';
         }
+        if (tier.prompt && !vision) sysExtra += (sysExtra ? '\n\n' : '') + tier.prompt;
         const ctx = String(body.context || '').slice(0, 9000);
         if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';

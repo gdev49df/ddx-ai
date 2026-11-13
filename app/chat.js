@@ -2767,7 +2767,7 @@
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
     // выбор модели
-    var MODELS = [['liama', 'Liama 2.7', 'Быстрые ответы на каждый день · 1 сообщение'], ['mistral', 'Mistral 3.1', 'Умнее для задач среднего уровня · 2 сообщения'], ['synape', 'Synape 2.2', 'Глубокие рассуждения для сложных задач · 3 сообщения'], ['rable', 'Rable 3.4', 'Самая мощная, для самых трудных задач · 4 сообщения']];
+    var MODELS = [['liama', 'Liama 2.7', 'Быстрые текстовые ответы · 1 сообщение'], ['mistral', 'Mistral 2.9', 'Умнее: думает по шагам и проверяет ответ · 2 сообщения']];
     var curM = function () { return MODELS.filter(function (m) { return m[0] === S.settings.model; })[0] || MODELS[0]; };
     var mlab = h('span', { text: curM()[1], raw: 1 }), mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, mlab, icon('down')), mpop = null;
     var applyModel = function () {
@@ -2820,7 +2820,7 @@
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
-    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn || /^(synape|rable)$/.test(S.settings.model || ''); setThinking(true);
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn || /^mistral$/.test(S.settings.model || ''); setThinking(true);
     var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
