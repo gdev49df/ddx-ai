@@ -567,10 +567,12 @@ mark.hl.cur { background: var(--paper); color: var(--on-paper); }
 .tp i { position: absolute; left: 14%; height: 5px; border-radius: 3px; width: 46%; background: rgb(128 128 128 / .6); }
 .tp i + i { top: 38%; width: 32%; }
 .tp i:first-child { top: 24%; }
-.tp u { position: absolute; right: 12%; bottom: 14%; width: 14px; height: 14px; border-radius: 50%; background: #e07a5f; }
+.tp u { position: absolute; right: 12%; bottom: 14%; width: 14px; height: 14px; border-radius: 50%; background: #5b8def; }
 .tp.light { background: #f3f3f6; }
 .tp.dark { background: #1c1c1f; }
-.tp.auto { background: linear-gradient(135deg, #f3f3f6 50%, #1c1c1f 50%); }
+.tp.auto { background: #1c1c1f; }
+.tp.auto::before { content: ""; position: absolute; inset: 0; background: #f3f3f6; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.tp i, .tp u { z-index: 1; }
 .foot.center { text-align: center; margin: 22px 0 4px; }
 
 /* ===== фирменный шрифт для названия и анимации ===== */
@@ -661,3 +663,16 @@ html, body { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
 .md .tbl { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .md table { width: max-content; min-width: 100%; }
 .md pre, .md img { max-width: 100%; }
+
+/* профиль: всплывающее меню */
+.sprof { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 2px; border: 0; background: none; color: var(--ink); text-align: left; border-radius: 12px; }
+.sprof:active { transform: scale(.97); }
+.popmenu.prof { z-index: 90; min-width: 0; }
+.popmenu.prof .ptop { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border: 0; background: none; color: var(--ink); text-align: left; border-radius: 14px; }
+.popmenu.prof .acc-t { display: grid; gap: 2px; min-width: 0; }
+.popmenu.prof .acc-t b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.popmenu.prof .acc-t span { font-size: 13px; color: var(--mute); }
+.popmenu.prof .pbuy { display: flex; align-items: center; justify-content: center; gap: 8px; width: calc(100% - 12px); margin: 2px 6px 6px; min-height: 42px; border: 0; border-radius: 12px; background: var(--paper); color: var(--on-paper); font-size: 15px; font-weight: 600; }
+.popmenu.prof .pbuy svg.i { width: 18px; height: 18px; }
+.popmenu.prof .pv { margin-left: auto; font-style: normal; font-size: 13px; color: var(--mute); }
+.popmenu.prof .pi, .popmenu.prof .ptop, .popmenu.prof .pbuy { animation: rise .45s var(--ease) both; }

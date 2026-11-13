@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.0.1';
+  var VERSION = 'v2.1';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -606,11 +606,12 @@
         else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'пока нет чатов. напиши первый вопрос.' }));
       }
       var nm = (S.settings.name || '').trim();
-      foot.replaceChildren(
+      var prof = h('button', { class: 'sprof', type: 'button', 'aria-label': 'профиль' },
         h('span', { class: 'sava', text: (nm || 'D').charAt(0).toUpperCase() }),
-        h('span', { class: 'sname', text: nm || 'DDX AI', raw: 1 }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''),
-        h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })),
-        (function () { var g = h('button', { class: 'srow-more on', type: 'button', 'aria-label': 'меню' }, icon('gear')); g.addEventListener('click', function () { setDrawer(false); openMenu(); }); return g; })());
+        h('span', { class: 'sname', text: nm || 'DDX AI', raw: 1 }), sub ? h('span', { class: 'stag', text: sub.plan }) : document.createTextNode(''));
+      prof.addEventListener('click', function (e) { e.stopPropagation(); openProfile(); });
+      foot.replaceChildren(prof,
+        h('button', { class: 'spill', type: 'button', onclick: function () { newChat(null); closeSheet(); setDrawer(false); } }, icon('plus'), h('span', { text: 'новый чат' })));
     };
     input.addEventListener('input', fill);
     input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; searchBox.hidden = true; fill(); } });
@@ -1371,6 +1372,34 @@
   // выпадающее меню действий с чатом (три точки в шапке)
   var popEl = null;
   function closePop() { if (!popEl) return; var p = popEl; popEl = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 180); $('#more').classList.remove('on'); }
+  function openProfile() {
+    if (popEl) { closePop(); return; }
+    var foot = document.querySelector('.sfoot'); if (!foot) return;
+    var nm = (S.settings.name || '').trim();
+    var planName = sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free';
+    var go = function (fn) { return function () { closePop(); setDrawer(false); fn(); }; };
+    var item = function (label, ic, fn, val) {
+      var b = h('button', { class: 'pi', type: 'button' }, icon(ic), h('span', { text: label }), val ? h('em', { class: 'pv', text: val, raw: 1 }) : document.createTextNode(''));
+      b.addEventListener('click', go(fn)); return b;
+    };
+    var memN = (S.settings.memory || []).length;
+    var top = h('button', { class: 'ptop', type: 'button' },
+      h('span', { class: 'sava big', text: (nm || 'D').charAt(0).toUpperCase() }),
+      h('span', { class: 'acc-t' }, h('b', { text: nm || 'DDX AI', raw: 1 }), h('span', { text: 'Тариф ' + planName + (sub ? (sub.period === 'year' ? ' · год' : ' · месяц') : '') })));
+    top.addEventListener('click', go(openPersonal));
+    var up = h('button', { class: 'pbuy', type: 'button' }, icon('star'), h('span', { text: sub ? 'Сменить тариф' : 'Улучшить тариф' }));
+    up.addEventListener('click', go(function () { openPlans(); }));
+    popEl = h('div', { class: 'popmenu up prof', role: 'menu' },
+      top, up, h('i', { class: 'psep' }),
+      item('Персонализация', 'user', openPersonal),
+      item('Память', 'brain', openMemory, memN ? String(memN) : ''),
+      item('Тарифы', 'star', function () { openPlans(); }, planName),
+      h('i', { class: 'psep' }),
+      item('Настройки', 'gear', openMenu));
+    var r = foot.getBoundingClientRect();
+    popEl.style.left = (r.left + 4) + 'px'; popEl.style.width = (r.width - 8) + 'px'; popEl.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+    document.body.append(popEl);
+  }
   function openPop() {
     var c = curChat(); if (!c) return;
     if (popEl) { closePop(); return; }
@@ -1395,7 +1424,7 @@
     document.body.append(popEl); $('#more').classList.add('on');
   }
   $('#more').addEventListener('click', function (e) { e.stopPropagation(); openPop(); });
-  document.addEventListener('pointerdown', function (e) { if (popEl && !popEl.contains(e.target) && !e.target.closest('#more')) closePop(); });
+  document.addEventListener('pointerdown', function (e) { if (popEl && !popEl.contains(e.target) && !e.target.closest('#more, .sfoot')) closePop(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePop(); });
   window.addEventListener('resize', closePop);
   $('#menu').append(icon('gear')); $('#menu').addEventListener('click', openMenu);
