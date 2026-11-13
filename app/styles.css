@@ -1119,3 +1119,14 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 @media (prefers-reduced-motion: reduce) { svg.logo.herologo, svg.logo.herologo polygon { animation: none; } }
 .hero [hidden] { display: none !important; }
 .hero { padding-top: 64px; }
+
+/* подсказки над полем ввода */
+.sugg { margin: 0 0 8px; padding: 0 2px 2px; }
+.sugg[hidden] { display: none !important; }
+.sugg .chip { flex: none; animation: rise .35s var(--ease) both; }
+.sugg .chip:nth-child(2) { animation-delay: .06s; } .sugg .chip:nth-child(3) { animation-delay: .12s; }
+/* переключатель вариантов ответа */
+.vsw { display: inline-flex; align-items: center; gap: 0; margin-right: 4px; color: var(--silver); }
+.vsw .vn { font-size: 12.5px; min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+.vsw .vb:disabled { opacity: .3; }
+.cap-in .ib.mic.busy { opacity: .6; animation: recp 1.2s ease-in-out infinite; }

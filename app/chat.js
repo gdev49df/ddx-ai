@@ -65,6 +65,7 @@
     stop: '<rect x="7" y="7" width="10" height="10" rx="2.4" fill="currentColor"/>',
     mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/>',
     up: '<path d="M6 14.5l6-6 6 6"/>',
+    back: '<path d="M14.5 6l-6 6 6 6"/>', fwd: '<path d="M9.5 6l6 6-6 6"/>', download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>', upload: '<path d="M12 16V5M7 9.5l5-5 5 5M5 19.5h14"/>',
     file: '<path d="M7 3.5h6.5L18 8v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V8H18"/>',
     chev: '<path d="M9.5 6l6 6-6 6"/>',
     gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13.5l3.5-4"/>',
@@ -121,7 +122,9 @@
 
   function cleanMsgs(list) {
     return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
-      .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [] }; });
+      .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [],
+        alts: Array.isArray(m.alts) ? m.alts.slice(0, 2).map(function (a) { return { text: String((a && a.text) || ''), src: Array.isArray(a && a.src) ? a.src : [], at: +(a && a.at) || 0 }; }) : null, vi: +m.vi === 1 ? 1 : 0,
+        next: Array.isArray(m.next) ? m.next.slice(0, 3).map(function (x) { return String(x).slice(0, 80); }) : [] }; });
   }
   function load() {
     var d = null;
@@ -154,7 +157,7 @@
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
         return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
-          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }) }; }) };
+          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
       })
     });
   }
@@ -522,13 +525,25 @@
       var again = isLast ? ib('refresh', 'повторить', function () {
         var c2 = curChat(); if (!c2 || busy) { toast('дождись ответа или нажми стоп'); return; }
         if (c2.msgs[c2.msgs.length - 1] !== m) return;
-        c2.msgs.pop(); save(); renderAll(); request();
+        pendingAlt = { chat: c2.id, msg: m }; c2.msgs.pop(); save(); renderAll(); request();
       }) : null;
+      var vsw = null;
+      if (isLast && m.alts && m.alts.length > 1) {
+        var go2 = function (d) {
+          var n = (m.vi || 0) + d; if (n < 0 || n > m.alts.length - 1 || busy) return;
+          m.alts[m.vi || 0] = { text: m.text, src: m.src || [], at: m.at || 0 };
+          var v = m.alts[n]; m.vi = n; m.text = v.text; m.src = v.src || []; m.at = v.at || m.at; save(); renderAll();
+        };
+        var pb = h('button', { class: 'ab vb', type: 'button', 'aria-label': 'предыдущий вариант' }, icon('back')), nb = h('button', { class: 'ab vb', type: 'button', 'aria-label': 'следующий вариант' }, icon('fwd'));
+        pb.disabled = !(m.vi > 0); nb.disabled = !(m.vi < m.alts.length - 1);
+        pb.addEventListener('click', function (e) { e.stopPropagation(); go2(-1); }); nb.addEventListener('click', function (e) { e.stopPropagation(); go2(1); });
+        vsw = h('span', { class: 'vsw' }, pb, h('span', { class: 'vn', text: ((m.vi || 0) + 1) + '/' + m.alts.length, raw: 1, 'data-notr': '1' }), nb);
+      }
       var spk = ib('speaker', 'озвучить', function (b) { speak(m.text, b); });
       var shr = ib('share', 'поделиться', function () { shareText(m.text, 'ответ DDX AI'); });
       var when = m.at ? (function () { var d = new Date(m.at), now = new Date(), loc = window.I18N ? I18N.locale() : 'ru-RU', tm = d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
         return d.toDateString() === now.toDateString() ? tm : d.toLocaleDateString(loc, { day: 'numeric', month: 'short' }) + ', ' + tm; })() : '';
-      el.append(h('div', { class: 'msg-actions' }, copy, up, down, again, spk, shr, when ? h('span', { class: 'mtime', text: when, raw: 1, 'data-notr': '1' }) : null));
+      el.append(h('div', { class: 'msg-actions' }, vsw, copy, up, down, again, spk, shr, when ? h('span', { class: 'mtime', text: when, raw: 1, 'data-notr': '1' }) : null));
       if (fresh) { el.classList.add('fresh'); streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
     }
     return el;
@@ -657,7 +672,7 @@
     curMsgs().forEach(function (m) { chat.append(msgEl(m, false)); });
     updateHeader(); showSkillbar();
     if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
-    showHero(); showLeft();
+    showHero(); showLeft(); showSugg();
   }
   function toBottom(smooth) { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
@@ -685,6 +700,15 @@
     if (typeof armLimitNote === 'function') armLimitNote();
   }
 
+  var pendingAlt = null;
+  function showSugg() {
+    var bar = $('#sugg'), c = curChat(), m = c && c.msgs[c.msgs.length - 1];
+    if (!bar) return;
+    if (busy || !m || m.role !== 'assistant' || !m.next || !m.next.length || S.settings.sugg === false) { if (!bar.hidden) { bar.hidden = true; bar.replaceChildren(); measure(); } return; }
+    bar.replaceChildren();
+    m.next.forEach(function (q) { bar.append(h('button', { class: 'chip', type: 'button', text: q, raw: 1, onclick: function () { send(q); } })); });
+    bar.hidden = false; bar.scrollLeft = 0; measure();
+  }
   var thinkTimer = 0;
   var THINK_WORDS = ['думаю…', 'размышляю…', 'подбираю слова…', 'собираю мысли…', 'пишу ответ…', 'секунду…', 'соображаю…', 'копаюсь в памяти…', 'обдумываю…', 'формулирую…'];
   var THINK_SEARCH = ['ищу в интернете…', 'листаю сайты…', 'читаю источники…', 'сверяю данные…'];
@@ -1496,6 +1520,7 @@
     var pr = projectById(c ? c.project : null);
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
     var tail = '\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /). Ты ассистент DDX AI. Не называй, кто тебя создал и обучил, какая за тобой модель, компания или провайдер. На такие вопросы отвечай, что ты ассистент DDX AI и подробностей об устройстве не раскрываешь.';
+    if (st.sugg !== false) tail += '\nВ самом конце ответа, последней строкой, добавь [[next: вопрос 1 | вопрос 2 | вопрос 3]]: 2-3 коротких (до 6 слов) вероятных продолжения разговора, написанных от лица пользователя. Не добавляй, если ответ это короткое приветствие, благодарность или твой встречный вопрос.';
     tail += extra || '';
     return out.join('\n').slice(0, 1990 - tail.length) + tail;
   }
@@ -1619,16 +1644,31 @@
   }
   function importAll(file) {
     file.text().then(function (t) {
-      var d = JSON.parse(t), n = 0;
+      var d = JSON.parse(t);
       if (!d || !Array.isArray(d.chats)) throw new Error('bad');
-      var have = {}; S.chats.forEach(function (c) { have[c.id] = 1; });
-      d.chats.forEach(function (c) {
-        if (!c || !c.id || have[c.id]) return;
-        S.chats.push({ id: String(c.id), title: String(c.title || 'Чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), msgs: cleanMsgs(c.msgs) }); n++;
-      });
-      var hp = {}; S.projects.forEach(function (p) { hp[p.id] = 1; });
-      (Array.isArray(d.projects) ? d.projects : []).forEach(function (p) { if (p && p.id && !hp[p.id]) S.projects.push({ id: String(p.id), name: String(p.name || 'Проект'), instructions: String(p.instructions || ''), files: Array.isArray(p.files) ? p.files.slice(0, 20) : [], created: p.created || Date.now() }); });
-      save(); renderAll(); closeSheet(); toast(n ? 'Добавлено чатов: ' + n : 'Новых чатов в копии нет');
+      var merge = function () {
+        var n = 0, have = {}; S.chats.forEach(function (c) { have[c.id] = 1; });
+        d.chats.forEach(function (c) {
+          if (!c || !c.id || have[c.id]) return;
+          S.chats.push({ id: String(c.id), title: String(c.title || 'Чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), msgs: cleanMsgs(c.msgs) }); n++;
+        });
+        var hp = {}; S.projects.forEach(function (p) { hp[p.id] = 1; });
+        (Array.isArray(d.projects) ? d.projects : []).forEach(function (p) { if (p && p.id && !hp[p.id]) S.projects.push({ id: String(p.id), name: String(p.name || 'Проект'), instructions: String(p.instructions || ''), files: Array.isArray(p.files) ? p.files.filter(function (f) { return f && f.name; }).slice(0, 20).map(function (f) { return { name: String(f.name).slice(0, 60), text: String(f.text || '').slice(0, 15000) }; }) : [], created: p.created || Date.now(), ord: p.ord }); });
+        var st = d.settings || {}, mem = S.settings.memory || (S.settings.memory = []);
+        (Array.isArray(st.memory) ? st.memory : []).forEach(function (x) { if (typeof x === 'string' && mem.indexOf(x) < 0) mem.push(x); });
+        var sk = skillList(); (Array.isArray(st.skills) ? st.skills : []).forEach(function (k) { if (k && k.cmd && !sk.some(function (y) { return y.cmd === k.cmd; })) sk.push(k); });
+        save(); renderAll(); closeSheet(); toast(n ? 'Добавлено чатов: ' + n : 'Новых чатов в копии нет');
+      };
+      var replace = function () {
+        if (!ls.set(KEY, JSON.stringify(d))) { toast('Не хватает памяти для восстановления'); return; }
+        load(); renderAll(); refreshSide(); closeSheet(); toast('Восстановлено: ' + S.chats.length + ' чатов');
+      };
+      var btn = function (label, cls, fn) { var b = h('button', { class: 'btn ' + cls, type: 'button' }, h('span', { text: label })); b.addEventListener('click', fn); return b; };
+      openSheet([
+        h('h2', { text: 'Восстановить из копии' }),
+        h('p', { class: 'cap ptxt', text: 'В копии ' + d.chats.length + ' чатов и ' + (Array.isArray(d.projects) ? d.projects.length : 0) + ' проектов. Их можно добавить к текущим или заменить всё, что есть сейчас.', raw: 1 }),
+        h('div', { class: 'err-btns' }, btn('Добавить к текущим', 'solid', merge), btn('Заменить всё', '', replace))
+      ]);
     }).catch(function () { toast('Это не копия DDX AI'); });
   }
   var importInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
@@ -2147,6 +2187,7 @@
       h('div', { class: 'group' },
         swRow('Память', 'Использовать сохранённые факты о тебе в ответах.', swSwitch('memOn', true)),
         swRow('Прошлые чаты', 'Брать подходящие фрагменты из других чатов.', swSwitch('chatSearch', false)),
+        swRow('Подсказки после ответа', 'Показывать над полем ввода варианты, о чём спросить дальше.', (function () { var b = swSwitch('sugg', true); b.addEventListener('click', showSugg); return b; })()),
         swRow('Названия чатов', 'Автоматически придумывать название по первому сообщению.', swSwitch('autoTitle', true)),
         swRow('Уведомление о лимите', 'Сообщить, когда лимит сообщений восстановится (пока приложение открыто).', (function () { var s = swSwitch('limitNote', true); s.addEventListener('click', function () { if (S.settings.limitNote !== false && window.Notification && Notification.permission === 'default') Notification.requestPermission(); }); return s; })()),
         swRow('Отправка по Enter', 'На компьютере Enter отправляет, Shift+Enter — новая строка.', swSwitch('enterSend', true))),
@@ -2471,24 +2512,64 @@
   }
   $('#pick').append(icon('plus'));
   initLimitNote();
-  // голосовой ввод: если браузер не умеет, кнопка скрыта
+  // голосовой ввод: распознавание браузера, а если его нет (iPhone, приложение с домашнего экрана), запись и распознавание на сервере
   (function voice() {
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#mic');
-    if (!SR) { mic.hidden = true; return; }
+    var standalone = (navigator.standalone === true) || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    var useSR = !!SR && !(ios && standalone);
+    var canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    if (!useSR && !canRec) { mic.hidden = true; return; }
     mic.append(icon('mic'));
-    var rec = null, base = '';
-    var stopRec = function () { if (rec) { try { rec.stop(); } catch (e) { /* уже остановлен */ } } };
+    var lang = function () { var l = S.settings.lang; return l === 'en' ? 'en' : l === 'kk' ? 'kk' : 'ru'; };
+    var put = function (base, txt) { ta.value = base + (base && !/\s$/.test(base) ? ' ' : '') + txt; grow(); syncSend(); storeDraft(); };
+    if (useSR) {
+      var rec = null, base = '';
+      var stopRec = function () { if (rec) { try { rec.stop(); } catch (e) { /* уже остановлен */ } } };
+      mic.addEventListener('click', function () {
+        if (rec) { stopRec(); return; }
+        rec = new SR(); rec.lang = { ru: 'ru-RU', en: 'en-US', kk: 'kk-KZ' }[lang()]; rec.interimResults = true; rec.continuous = true;
+        base = ta.value; mic.classList.add('rec');
+        rec.onresult = function (e) { var txt = '', k; for (k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript; put(base, txt); };
+        rec.onerror = function (e) { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('нет доступа к микрофону: разреши его в настройках'); };
+        rec.onend = function () { rec = null; mic.classList.remove('rec'); };
+        try { rec.start(); } catch (e2) { rec = null; mic.classList.remove('rec'); toast('голосовой ввод недоступен'); }
+      });
+      return;
+    }
+    var mr = null, chunks = [], stream = null, tm = 0, working = false;
+    var finish = function () { if (tm) { clearTimeout(tm); tm = 0; } if (mr && mr.state !== 'inactive') { try { mr.stop(); } catch (e) { /* уже остановлен */ } } };
     mic.addEventListener('click', function () {
-      if (rec) { stopRec(); return; }
-      rec = new SR(); rec.lang = 'ru-RU'; rec.interimResults = true; rec.continuous = true;
-      base = ta.value; mic.classList.add('rec');
-      rec.onresult = function (e) {
-        var txt = '', k; for (k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript;
-        ta.value = base + (base && !/\s$/.test(base) ? ' ' : '') + txt; grow(); syncSend();
-      };
-      rec.onerror = function (e) { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('нет доступа к микрофону: разреши его или диктуй кнопкой на клавиатуре'); else if (e.error !== 'aborted' && e.error !== 'no-speech') toast('голосовой ввод не сработал'); };
-      rec.onend = function () { rec = null; mic.classList.remove('rec'); };
-      try { rec.start(); } catch (e2) { rec = null; mic.classList.remove('rec'); toast('голосовой ввод недоступен'); }
+      if (working) return;
+      if (mr && mr.state === 'recording') { finish(); return; }
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
+        stream = st; chunks = [];
+        var mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].filter(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); })[0] || '';
+        mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        mr.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); }); mic.classList.remove('rec');
+          var blob = new Blob(chunks, { type: mr.mimeType || mime || 'audio/mp4' }); mr = null;
+          if (blob.size < 1500) { toast('Не услышал голос, попробуй ещё раз'); return; }
+          working = true; mic.classList.add('busy'); mic.disabled = true;
+          var fr = new FileReader();
+          fr.onload = function () {
+            var before = ta.value;
+            fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'stt', audio: String(fr.result), lang: lang(), device: device }) })
+              .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); })
+              .then(function (x) {
+                if (x.ok && typeof x.j.text === 'string') { if (x.j.text.trim()) put(before, x.j.text.trim()); else toast('Не удалось разобрать речь'); }
+                else if (x.j.error === 'mode') toast('В воркере нет распознавания речи: задеплой worker/full-worker.js');
+                else if (x.st === 413) toast('Запись слишком длинная, говори покороче');
+                else toast('Не получилось распознать: ' + (x.j.detail || x.j.error || x.st));
+              }, function () { toast('Нет связи с воркером'); })
+              .then(function () { working = false; mic.disabled = false; mic.classList.remove('busy'); });
+          };
+          fr.readAsDataURL(blob);
+        };
+        mr.start(); mic.classList.add('rec'); toast('Говори, потом нажми ещё раз');
+        tm = setTimeout(finish, 40000);
+      }, function () { toast('Нет доступа к микрофону: разреши его в настройках'); });
     });
   })();
   $('#pick').addEventListener('click', openPlus);
@@ -2536,7 +2617,8 @@
     if (!text && !atts.length) return;
     if (quietNow()) { toast('Тихие часы: отправка отключена до ' + (S.settings.quietTo || '07:00')); return; }
     lastSend = Date.now(); if (!sessAt) sessAt = lastSend;
-    clearError();
+    clearError(); showSugg();
+    if (pendingAlt) { var pa = pendingAlt; pendingAlt = null; var pc0 = curChat(); if (pc0 && pc0.id === pa.chat && pc0.msgs.length && pc0.msgs[pc0.msgs.length - 1].role === 'user') pc0.msgs.push(pa.msg); }
     var mm = /^\s*запомни(?:те)?[,:]?\s+(?:что\s+)?([\s\S]{3,200})$/i.exec(text);
     if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
     var c = ensureChat(), first = !c.msgs.length;
@@ -2630,7 +2712,7 @@
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
-    busy = true; busyChat = c.id; syncSend(); clearError(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn; setThinking(true);
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn; setThinking(true);
     var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
@@ -2655,20 +2737,30 @@
       if (x.ok && x.j.answer) {
         var ansText = String(x.j.answer);
         var facts = [], ttl = '';
-        ansText = ansText.replace(/\[\[\s*(title|название|memory|память)\s*:\s*([^\]\n]{1,200}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
+        var nxt = [];
+        ansText = ansText.replace(/\[\[\s*(title|название|memory|память|next|далее)\s*:\s*([^\]\n]{1,320}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
           v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
+          if (/^(next|далее)$/i.test(k)) { nxt = v.split('|').map(function (x) { return x.replace(/^[\s"«»“”-]+|[\s"«»“”]+$/g, ''); }).filter(function (x) { return x && x.length < 80; }).slice(0, 3); return ''; }
           if (v) { if (/^(title|название)$/i.test(k)) ttl = v; else facts.push(v); }
           return '';
         }).replace(/\n{3,}/g, '\n\n').trim();
         if (wantTitle && ttl) { c.title = ttl.charAt(0).toUpperCase() + ttl.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
         if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
-        var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
+        var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [], next: nxt };
         if (Array.isArray(x.j.sources) && x.j.sources.length) m.src = x.j.sources.filter(function (s) { return s && /^https?:\/\//.test(s.url); }).slice(0, 6).map(function (s) { return { t: String(s.title || s.url).slice(0, 120), u: String(s.url) }; });
         else if (x.j.searched) toast('В интернете ничего не нашлось, отвечаю по своим знаниям');
+        if (pendingAlt && pendingAlt.chat === c.id) {
+          var pm = pendingAlt.msg, list = (pm.alts && pm.alts.length) ? pm.alts.slice() : [{ text: pm.text, src: pm.src || [], at: pm.at || 0 }];
+          if (pm.alts && pm.alts.length) list[pm.vi || 0] = { text: pm.text, src: pm.src || [], at: pm.at || 0 };
+          var nv = { text: m.text, src: m.src || [], at: m.at };
+          if (list.length < 2) { list.push(nv); m.vi = list.length - 1; } else { list[pm.vi || 0] = nv; m.vi = pm.vi || 0; }
+          m.alts = list;
+        }
+        pendingAlt = null;
         c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { setLeft(x.j); showLeft(); }
         if (here()) {
-          var el = msgEl(m, true); chat.append(el);
+          var el = msgEl(m, true); chat.append(el); showSugg();
           requestAnimationFrame(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
         } else toast('ответ готов в чате «' + c.title + '»');
         if (p.images.length && !x.j.vision) toast('ответ без фото: воркер ещё не обновлён');
@@ -2694,7 +2786,7 @@
       if (stopped) { toast('остановил'); return; }
       var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
       if (here()) showError(msg); else toast(msg);
-    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); });
+    }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); });
   }
 
   sendBtn.addEventListener('click', function () { if (busy) stopGen(); else send(); });

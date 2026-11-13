@@ -715,6 +715,27 @@ export default {
 
       // вставка 2: положи прямо перед строкой  return reply(400, { error: 'mode' }, origin);
       // если раньше вставлял старую версию этой вставки, замени её целиком на эту
+      // распознавание речи для голосового ввода (whisper на groq); нужно, когда браузер сам не умеет (iPhone)
+      if (body.mode === 'stt') {
+        const am = /^data:audio\/([a-z0-9]+)(?:;[^,;]*)*;base64,([A-Za-z0-9+/=]+)$/i.exec(String(body.audio || ''));
+        if (!am) return reply(400, { error: 'audio' }, origin);
+        const sdev = String(body.device || '');
+        if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(sdev)) return reply(400, { error: 'device' }, origin);
+        if (!(await hit(env, 'stt:' + (user ? 'u' + user.id : sdev) + ':' + dayKey(env), Number(env.STT_LIMIT || 80), 172800))) return reply(429, { error: 'limit', detail: 'на сегодня голосовой ввод исчерпан' }, origin);
+        const bin = atob(am[2]); const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const ext = ({ mp4: 'mp4', webm: 'webm', ogg: 'ogg', wav: 'wav', mpeg: 'mp3' })[am[1].toLowerCase()] || 'mp4';
+        const fd = new FormData();
+        fd.append('file', new Blob([bytes], { type: 'audio/' + am[1] }), 'voice.' + ext);
+        fd.append('model', env.MODEL_STT || 'whisper-large-v3-turbo');
+        fd.append('response_format', 'json');
+        if (/^(ru|en|kk)$/.test(String(body.lang || ''))) fd.append('language', String(body.lang));
+        const sr = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { 'authorization': 'Bearer ' + env.GROQ_API_KEY }, body: fd });
+        if (!sr.ok) { let dm = ''; try { dm = ((await sr.json()).error || {}).message || ''; } catch (e) { /* тела нет */ } return reply(502, { error: 'upstream', detail: 'groq ' + sr.status + (dm ? ': ' + dm.slice(0, 140) : '') }, origin); }
+        const sj = await sr.json();
+        return reply(200, { text: String(sj.text || '').trim().slice(0, 2000) }, origin);
+      }
+
       if (body.mode === 'chat' || body.mode === 'sub') {
         // лимит как у chatgpt: скользящее окно 12 часов. каждое сообщение занимает слот и освобождает его через 12 часов после отправки.
         // free 12, pro 40, max 120, ultra 300 сообщений в окне. месяц или год влияют на цену и срок подписки, не на лимит
