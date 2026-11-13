@@ -1135,19 +1135,13 @@
     }).join('\n\n');
   }
   function shareText(text, title) {
-    if (navigator.share) { navigator.share({ title: title || 'DDX AI', text: text }).catch(function () { /* отменили */ }); return; }
+    if (navigator.share && window.matchMedia('(pointer: coarse)').matches) { navigator.share({ title: title || 'DDX AI', text: text }).catch(function () { /* отменили */ }); return; }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { toast('скопировал: поделиться можно вставкой'); }, function () { toast('не получилось поделиться'); });
     else toast('поделиться тут нельзя');
   }
   function exportChat(c) {
-    var name = (c.title || 'чат').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 50) + '.md', text = chatText(c);
-    try {
-      var file = new File([text], name, { type: 'text/markdown' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: c.title }).catch(function () { /* отменили */ }); return; }
-    } catch (e0) { /* без File */ }
-    var url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
-    var a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('файл «' + name + '» сохранён');
+    var name = (c.title || 'чат').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 50) + '.md';
+    saveFile(name, chatText(c), 'text/markdown');
   }
 
   var findBar = null, marks = [], markAt = 0;
@@ -1457,14 +1451,7 @@
 
   function backupData() { return JSON.parse(pack(false)); }
   function exportAll() {
-    var text = JSON.stringify(backupData()), name = 'ddx-ai-копия-' + new Date().toISOString().slice(0, 10) + '.json';
-    try {
-      var file = new File([text], name, { type: 'application/json' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Копия чатов DDX AI' }).catch(function () { /* отменили */ }); return; }
-    } catch (e0) { /* без File */ }
-    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    var a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('Копия сохранена');
+    saveFile('ddx-ai-копия-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(backupData()), 'application/json');
   }
   function importAll(file) {
     file.text().then(function (t) {
