@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.1.1';
+  var VERSION = 'v2.2';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -71,6 +71,7 @@
     more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
     down: '<path d="M6 9.5l6 6 6-6"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    bolt: '<path d="M13 3L5.5 13.5H11L10 21l7.5-10.5H12z"/>',
     edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',
     trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l.8 12.5h8.4L17 7M10.5 11v5M13.5 11v5"/>',
     user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>'
@@ -211,16 +212,107 @@
     });
     return into;
   }
+
+  /* ---------- файлы, копирование, подсветка кода ---------- */
+  function saveFile(name, text, mime) {
+    try {
+      var file = new File([text], name, { type: mime || 'text/plain' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(function () { /* отменили */ }); return; }
+    } catch (e0) { /* без File */ }
+    var url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+    var a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000); toast('файл «' + name + '» сохранён');
+  }
+  function copyText(text, btn) {
+    var done = function () {
+      if (!btn) { toast('скопировано'); return; }
+      var old = btn.cloneNode(true); btn.replaceChildren(icon('check'), h('span', { text: 'скопировано' })); btn.classList.add('pop');
+      setTimeout(function () { btn.classList.remove('pop'); btn.replaceChildren.apply(btn, Array.prototype.slice.call(old.childNodes)); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { toast('не получилось скопировать'); });
+    else { try { var t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = text; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); done(); } catch (e) { toast('копирование недоступно'); } }
+  }
+  var EXT = { js: 'js', ts: 'ts', py: 'py', json: 'json', html: 'html', css: 'css', sh: 'sh', sql: 'sql', java: 'java', c: 'c', cpp: 'cpp', cs: 'cs', go: 'go', rs: 'rs', php: 'php', kt: 'kt', swift: 'swift', yaml: 'yml', md: 'md', xml: 'xml' };
+  var LANG_ALIAS = { javascript: 'js', jsx: 'js', node: 'js', mjs: 'js', typescript: 'ts', tsx: 'ts', python: 'py', python3: 'py', bash: 'sh', shell: 'sh', zsh: 'sh', console: 'sh', csharp: 'cs', 'c#': 'cs', 'c++': 'cpp', golang: 'go', rust: 'rs', kotlin: 'kt', yml: 'yaml', markdown: 'md', htm: 'html', svg: 'xml', postgres: 'sql', mysql: 'sql', sqlite: 'sql', jsonc: 'json' };
+  var KW = {
+    js: 'const let var function return if else for while do switch case break continue new class extends import export from default async await try catch finally throw typeof instanceof in of this super null undefined true false void yield static get set delete',
+    ts: 'const let var function return if else for while do switch case break continue new class extends implements interface type enum import export from default async await try catch finally throw typeof instanceof in of this super null undefined true false void public private protected readonly static abstract as keyof namespace declare',
+    py: 'def class return if elif else for while in not and or is None True False import from as with try except finally raise pass break continue lambda yield global nonlocal async await self print',
+    sh: 'if then else elif fi for while do done case esac function in echo cd ls rm cp mv mkdir cat grep sudo export source npm npx pip git curl exit return',
+    sql: 'select from where group by order having join left right inner outer full on as and or not null insert into values update set delete create table drop alter add index primary key foreign references distinct limit offset union all case when then else end like in is exists count sum avg min max desc asc default unique',
+    c: 'int long short float double char void bool boolean string var val let fun func fn function return if else for foreach while do switch case break continue new class struct enum interface extends implements public private protected static final const abstract override virtual using namespace import package from null nil true false this self try catch finally throw throws defer go chan range map type mut impl trait pub use match async await in is as',
+    json: 'true false null', css: '', html: '', xml: ''
+  };
+  function langKey(l) {
+    l = String(l || '').toLowerCase().trim(); l = LANG_ALIAS[l] || l;
+    if (KW[l] != null) return l;
+    return /^(java|cpp|cs|go|rs|php|kt|swift|dart|scala|rb|ruby|lua|r)$/.test(l) ? 'c' : '';
+  }
+  var HL_RX = {};
+  function hlRx(k) {
+    if (HL_RX[k]) return HL_RX[k];
+    var com = k === 'py' || k === 'sh' ? '#[^\\n]*' : k === 'sql' ? '--[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/' : k === 'css' ? '\\/\\*[\\s\\S]*?\\*\\/' : k === 'html' || k === 'xml' ? '<!--[\\s\\S]*?-->' : k === 'json' ? '(?!)' : '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/';
+    var str = (k === 'py' ? '"""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|' : '') + '"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'' + (k === 'js' || k === 'ts' ? '|`(?:\\\\.|[^`\\\\])*`' : '');
+    var parts = ['(' + com + ')'];
+    if (k === 'json') parts.push('("(?:\\\\.|[^"\\\\\\n])*"(?=\\s*:))'); else parts.push('(?!)()');
+    parts.push('(' + str + ')');
+    parts.push(k === 'html' || k === 'xml' ? '(<\\/?[A-Za-z][\\w:-]*|\\/?>)' : k === 'css' ? '([.#][A-Za-z_-][\\w-]*)' : '(?!)()');
+    parts.push('(-?\\b\\d+(?:\\.\\d+)?(?:px|rem|em|vh|vw|ms|s|%)?)');
+    var kw = KW[k] || ''; parts.push(kw ? '(\\b(?:' + kw.split(' ').join('|') + ')\\b)' : '(?!)()');
+    return (HL_RX[k] = new RegExp(parts.join('|'), k === 'sql' ? 'gi' : 'g'));
+  }
+  var HL_CLS = ['', 'c', 'p', 's', 't', 'n', 'k'];
+  function highlight(code, lang) {
+    var k = langKey(lang), el = h('code');
+    if (!k || code.length > 12000) { el.textContent = code; return el; }
+    var rx = hlRx(k), last = 0, m;
+    rx.lastIndex = 0;
+    while ((m = rx.exec(code))) {
+      if (!m[0]) { rx.lastIndex++; continue; }
+      var g = 1; while (g < 7 && m[g] == null) g++;
+      if (m.index > last) el.append(code.slice(last, m.index));
+      el.append(h('span', { class: 'tk-' + HL_CLS[g], text: m[0], raw: 1 }));
+      last = m.index + m[0].length;
+    }
+    if (last < code.length) el.append(code.slice(last));
+    return el;
+  }
+  function blk(label, body, actions) {
+    return h('div', { class: 'blk' }, h('div', { class: 'bhead' }, h('span', { class: 'blabel', text: label, raw: 1 }), h('span', { class: 'bact' }, actions)), body);
+  }
+  function bbtn(ic, label, fn) {
+    var b = h('button', { class: 'bbtn', type: 'button', 'aria-label': label }, icon(ic), h('span', { text: label }));
+    b.addEventListener('click', function () { fn(b); }); return b;
+  }
+  function plainCell(t) { return String(t).replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, '$1$2').replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*([^*]+)\*/g, '$1'); }
+  function toCsv(head, body) {
+    var q = function (v) { v = plainCell(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    return '﻿' + [head].concat(body).map(function (r) { return head.map(function (_, j) { return q(r[j] || ''); }).join(';'); }).join('\r\n');
+  }
+  function codeBlock(code, lang) {
+    var k = langKey(lang), name = String(lang || '').trim().toLowerCase();
+    var label = name && !/^(text|txt|plain|plaintext)$/.test(name) ? name : 'код', ext = EXT[LANG_ALIAS[name] || name] || EXT[k] || 'txt';
+    return blk(label, h('pre', null, highlight(code, lang)), [
+      bbtn('copy', 'копировать', function (b) { copyText(code, b); }),
+      bbtn('download', 'скачать', function () { saveFile('code.' + ext, code, 'text/plain'); })
+    ]);
+  }
+  function tableBlock(head, body, tbl) {
+    return blk('таблица', tbl, [
+      bbtn('copy', 'копировать', function (b) { copyText([head].concat(body).map(function (r) { return head.map(function (_, j) { return plainCell(r[j] || ''); }).join('\t'); }).join('\n'), b); }),
+      bbtn('download', 'скачать', function () { saveFile('table.csv', toCsv(head, body), 'text/csv'); })
+    ]);
+  }
   function cells(line) { return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
   function mdBlock(text) {
     var root = h('div', { class: 'md' }), lines = String(text || '').replace(/\r/g, '').split('\n'), i = 0, list = null, ordered = false;
     while (i < lines.length) {
       var line = lines[i].trim(), m;
       if (/^```/.test(line)) {
-        var code = []; i++;
+        var lang = line.replace(/^```+/, '').trim().split(/\s+/)[0] || '', code = []; i++;
         while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i]); i++; }
         i++; list = null;
-        root.append(h('pre', null, h('code', { text: code.join('\n') })));
+        root.append(codeBlock(code.join('\n'), lang));
         continue;
       }
       if (/^\|.*\|$/.test(line) && i + 1 < lines.length && /^\|?[\s:|-]+\|?$/.test(lines[i + 1].trim()) && lines[i + 1].indexOf('-') >= 0) {
@@ -229,7 +321,7 @@
         var thead = h('tr'), tbody = h('tbody');
         head.forEach(function (c) { thead.append(mdInline(c, h('th'))); });
         body.forEach(function (r) { var tr = h('tr'); head.forEach(function (_, j) { tr.append(mdInline(r[j] || '', h('td'))); }); tbody.append(tr); });
-        root.append(h('div', { class: 'tbl' }, h('table', null, h('thead', null, thead), tbody)));
+        root.append(tableBlock(head, body, h('div', { class: 'tbl' }, h('table', null, h('thead', null, thead), tbody))));
         continue;
       }
       i++;
@@ -253,7 +345,7 @@
   // текст ответа проявляется слово за словом: каждое слово плавно выходит из размытия
   function streamWords(el) {
     var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = [];
-    while (walker.nextNode()) { if (!walker.currentNode.parentElement.closest('pre')) nodes.push(walker.currentNode); }
+    while (walker.nextNode()) { if (!walker.currentNode.parentElement.closest('pre, .bhead')) nodes.push(walker.currentNode); }
     var total = nodes.reduce(function (n, t) { return n + (t.nodeValue.match(/\S+/g) || []).length; }, 0);
     var step = Math.min(0.05, 4 / Math.max(total, 1)), n = 0;
     nodes.forEach(function (t) {
@@ -284,6 +376,7 @@
       }
       if (m.files && m.files.length) el.append(h('div', { class: 'fchips' }, m.files.map(function (f) { return h('span', { class: 'fchip' }, icon('file'), h('span', { text: f.name })); })));
       if (m.text) el.append(h('p', { text: m.text, raw: 1 }));
+      if (m.text) { var eb = h('button', { class: 'medit', type: 'button', 'aria-label': 'изменить' }, icon('edit')); eb.addEventListener('click', function (e) { e.stopPropagation(); editMsg(m, el); }); el.append(eb); }
       if (fresh) el.classList.add('rise');
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
@@ -299,6 +392,30 @@
       if (fresh) { streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
     }
     return el;
+  }
+
+
+  // правка своего сообщения: всё после него убирается, ответ пишется заново
+  function editMsg(m, el) {
+    if (busy) { toast('дождись ответа или нажми стоп'); return; }
+    var c = curChat(); if (!c || el.classList.contains('editing')) return;
+    var before = Array.prototype.slice.call(el.childNodes);
+    var box = h('textarea', { class: 'editbox', rows: '1', 'aria-label': 'изменить сообщение' }); box.value = m.text;
+    var fit = function () { box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 260) + 'px'; };
+    var stop = function () { el.classList.remove('editing'); el.replaceChildren.apply(el, before); };
+    var ok = h('button', { class: 'btn solid', type: 'button', text: 'Отправить' }), no = h('button', { class: 'btn', type: 'button', text: 'Отмена' });
+    no.addEventListener('click', stop);
+    ok.addEventListener('click', function () {
+      var t = box.value.trim(); if (!t) return;
+      var i = c.msgs.indexOf(m); if (i < 0) return;
+      m.text = t; c.msgs.length = i + 1; c.updated = Date.now();
+      if (i === 0) c.title = makeTitle(t);
+      save(); renderAll(); toBottom(true); request();
+    });
+    box.addEventListener('input', fit);
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape') stop(); });
+    el.classList.add('editing'); el.replaceChildren(box, h('div', { class: 'editbtns' }, no, ok));
+    fit(); box.focus(); box.setSelectionRange(box.value.length, box.value.length);
   }
 
   // шапка показывает название открытого чата и проект
@@ -328,11 +445,27 @@
     }
   }
   function showHero() { hero.hidden = !!(curMsgs().length || thinkEl); }
+
+  /* ---------- черновики: недописанный текст у каждого чата свой ---------- */
+  var KEY_DRAFT = 'wchat-drafts', drafts = {}, draftKey = null;
+  try { drafts = JSON.parse(ls.get(KEY_DRAFT) || '{}') || {}; } catch (eD) { drafts = {}; }
+  function dKey() { return S.cur || ('new' + (S.pendingProject || '')); }
+  function storeDraft() {
+    if (draftKey == null) return;
+    var v = ta.value;
+    if (v.trim()) drafts[draftKey] = v; else delete drafts[draftKey];
+    try { ls.set(KEY_DRAFT, JSON.stringify(drafts)); } catch (eS) { /* нет места */ }
+  }
+  function loadDraft() {
+    var k = dKey(); if (k === draftKey) return;
+    storeDraft(); draftKey = k;
+    ta.value = drafts[k] || ''; grow(); syncSend();
+  }
   function renderAll() {
-    closeFind(); thinkEl = null; errEl = null;
+    closeFind(); thinkEl = null; errEl = null; loadDraft();
     chat.replaceChildren();
     curMsgs().forEach(function (m) { chat.append(msgEl(m, false)); });
-    updateHeader();
+    updateHeader(); showSkillbar();
     if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
     showHero(); showLeft();
   }
@@ -549,7 +682,7 @@
       if (wide() || e.touches.length > 1 || !sheet.hidden) return;
       var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); W = side.offsetWidth || 320;
       if (side.classList.contains('open')) start = 'close';
-      else if (!e.target.closest || !e.target.closest('pre, table, textarea, input, .atts, .pics')) start = 'open';
+      else if (!e.target.closest || !e.target.closest('pre, table, .blk, textarea, input, .atts, .pics')) start = 'open';
     }, { passive: true });
     document.addEventListener('touchmove', function (e) {
       if (!start) return;
@@ -701,7 +834,7 @@
         nodes.forEach(function (node) {
           var low = node.nodeValue.toLowerCase(), at = low.indexOf(q), pos = 0, cur = node, parts = [];
           if (at < 0) return;
-          if (node.parentNode.closest && node.parentNode.closest('.msg-actions')) return;
+          if (node.parentNode.closest && node.parentNode.closest('.msg-actions, .bhead, .medit')) return;
           while (at >= 0) { parts.push([at, at + q.length]); at = low.indexOf(q, at + q.length); }
           for (var i = parts.length - 1; i >= 0; i--) {
             var tail = cur.splitText(parts[i][0]); tail.splitText(q.length);
@@ -854,10 +987,10 @@
   /* ---------- тарифы ---------- */
   // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
   var LIMITS = {
-    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 5 },
-    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 15 },
-    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30 },
-    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30 }
+    free: { photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 5, skills: 2 },
+    pro: { photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 15, skills: 8 },
+    max: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30, skills: 1e9 },
+    ultra: { photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 30, skills: 1e9 }
   };
   function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
   function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
@@ -879,7 +1012,8 @@
       'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
       big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
       big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins,
-      'Память: до ' + L.memory + ' записей'
+      'Память: до ' + L.memory + ' записей',
+      big(L.skills) ? 'Навыки без ограничений' : 'Навыки: до ' + L.skills
     ];
     return h('div', { class: 'feat' }, rows.map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
   }
@@ -1020,6 +1154,7 @@
       h('div', { class: 'group' },
         grow2('Персонализация', 'user', nm || '', openPersonal),
         grow2('Память', 'brain', (S.settings.memory || []).length ? String((S.settings.memory || []).length) : '', openMemory),
+        grow2('Навыки', 'bolt', skillList().length ? String(skillList().length) : '', openSkills),
         grow2('Тариф', 'star', planName, function () { openPlans(); }),
         grow2('Использование', 'gauge', usage, null)),
       h('p', { class: 'glabel', text: 'Внешний вид' }), h('div', { class: 'group pad' }, themes),
@@ -1072,6 +1207,102 @@
     ], true);
   }
 
+
+  /* ---------- навыки: готовые инструкции из файла .txt / .md ---------- */
+  var SK_MAX = 3500;
+  function skillList() { return S.settings.skills || (S.settings.skills = []); }
+  function skillByCmd(cmd) { cmd = String(cmd || '').toLowerCase(); return skillList().filter(function (k) { return k.cmd === cmd; })[0] || null; }
+  function cleanCmd(x) { return String(x || '').replace(/^\/+/, '').toLowerCase().replace(/[^\p{L}\d_-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 32); }
+  // формат файла: первая строка «/команда» (или command: в шапке ---), дальше сама инструкция
+  function parseSkill(text, fileName) {
+    var t = String(text).replace(/^﻿/, '').replace(/\r/g, '').trim(), meta = {}, body = t, fm = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(t);
+    if (fm) {
+      fm[1].split('\n').forEach(function (ln) { var m = /^\s*([\w-]+)\s*:\s*(.*)$/.exec(ln); if (m) meta[m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, ''); });
+      body = fm[2].trim();
+    }
+    var cmd = meta.command || meta.cmd || meta.trigger || '';
+    if (!cmd) { var f = /^[#\s]*(\/[^\s]+)[ \t]*(?:\n([\s\S]*))?$/.exec(body); if (f) { cmd = f[1]; body = (f[2] || '').trim(); } }
+    if (!cmd) cmd = String(fileName || '').replace(/\.[^.]+$/, '');
+    cmd = cleanCmd(cmd);
+    if (!cmd || cmd === 'off') throw new Error('cmd');
+    if (!body) throw new Error('empty');
+    return { id: uid(), cmd: cmd, name: (meta.name || '').slice(0, 40) || cmd, desc: (meta.description || body.split('\n')[0]).slice(0, 90), text: body.slice(0, SK_MAX), cut: body.length > SK_MAX };
+  }
+  function addSkillFiles(files) {
+    var list = Array.prototype.slice.call(files || []), done = 0, last = '';
+    Promise.all(list.map(function (f) {
+      return f.text().then(function (t) {
+        var k = parseSkill(t, f.name), old = skillByCmd(k.cmd), arr = skillList();
+        if (old) { k.id = old.id; arr[arr.indexOf(old)] = k; }
+        else { if (arr.length >= lim().skills) { limitToast('На тарифе ' + planWord() + ' до ' + lim().skills + ' навыков'); return; } arr.push(k); }
+        done++; last = '/' + k.cmd; if (k.cut) toast('навык длинный: взял первые ' + SK_MAX + ' символов');
+      }, function () { /* прочитаем ниже */ }).then(null, function (e) { toast(e && e.message === 'cmd' ? 'в файле нет команды: первой строкой напиши /имя' : e && e.message === 'empty' ? 'в файле нет инструкции' : 'не получилось прочитать «' + f.name + '»'); });
+    })).then(function () { if (done) { save(); toast(done === 1 ? 'навык ' + last + ' добавлен' : 'навыков добавлено: ' + done); } if (sheet.classList.contains('show')) openSkills(); });
+  }
+  // нужный навык для сообщения: команда в начале текста, иначе включённый на весь чат
+  function skillOf(c, text) {
+    var m = /^\s*\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(text || '');
+    if (m) { var k = skillByCmd(m[1]); if (k) return { skill: k, rest: (m[2] || '').trim(), inline: true }; }
+    var id = (S.settings.stick || {})[c && c.id], st = id && skillList().filter(function (x) { return x.id === id; })[0];
+    return st ? { skill: st, rest: String(text || ''), inline: false } : null;
+  }
+  function setStick(c, k) {
+    var st = S.settings.stick || (S.settings.stick = {});
+    if (k) st[c.id] = k.id; else delete st[c.id];
+    save(); showSkillbar();
+  }
+  function showSkillbar() {
+    var c = curChat(), id = c && (S.settings.stick || {})[c.id], k = id && skillList().filter(function (x) { return x.id === id; })[0], bar = $('#skillbar');
+    if (!k) { bar.hidden = true; bar.replaceChildren(); measure(); return; }
+    var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'выключить навык' }, icon('close')); x.addEventListener('click', function () { setStick(c, null); toast('навык выключен'); });
+    bar.hidden = false; bar.replaceChildren(icon('bolt'), h('span', { text: 'навык /' + k.cmd, raw: 1 }), x); measure();
+  }
+  var skillPop = null;
+  function closeSkillPop() { if (skillPop) { skillPop.remove(); skillPop = null; } }
+  function skillHint() {
+    var m = /^\/([^\s]*)$/.exec(ta.value), c = curChat();
+    if (!m) { closeSkillPop(); return; }
+    var q = m[1].toLowerCase(), items = skillList().filter(function (k) { return k.cmd.indexOf(q) === 0; }).map(function (k) { return [k.cmd, k.desc]; });
+    if (c && (S.settings.stick || {})[c.id] && 'off'.indexOf(q) === 0) items.push(['off', 'выключить навык']);
+    if (!items.length) { closeSkillPop(); return; }
+    closeSkillPop();
+    skillPop = h('div', { class: 'popmenu up skillpop', role: 'menu' }, items.slice(0, 5).map(function (it) {
+      var b = h('button', { class: 'pi', type: 'button' }, icon('bolt'), h('span', { class: 'sk-t' }, h('b', { text: '/' + it[0], raw: 1 }), h('em', { text: it[1], raw: 1 })));
+      b.addEventListener('pointerdown', function (e) { e.preventDefault(); ta.value = '/' + it[0] + (it[0] === 'off' ? '' : ' '); closeSkillPop(); grow(); syncSend(); storeDraft(); ta.focus(); });
+      return b;
+    }));
+    var r = $('#composer').getBoundingClientRect();
+    skillPop.style.left = Math.max(10, r.left + 12) + 'px'; skillPop.style.width = Math.min(r.width - 24, 420) + 'px'; skillPop.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+    document.body.append(skillPop);
+  }
+  document.addEventListener('pointerdown', function (e) { if (skillPop && !skillPop.contains(e.target) && e.target !== ta) closeSkillPop(); });
+  function openSkills() {
+    var arr = skillList(), box = h('div', { class: 'group' });
+    if (!arr.length) box.append(h('p', { class: 'cap pad', text: 'Пока нет навыков. Загрузи файл .txt или .md.' }));
+    arr.forEach(function (k, i) {
+      var use = h('button', { class: 'sk-use', type: 'button' }, h('span', { class: 'sk-t' }, h('b', { text: k.name === k.cmd ? '/' + k.cmd : k.name, raw: 1 }), h('em', { text: (k.name === k.cmd ? '' : '/' + k.cmd + ' · ') + k.desc, raw: 1 })));
+      use.addEventListener('click', function () { closeSheet(); ta.value = '/' + k.cmd + ' '; grow(); syncSend(); storeDraft(); ta.focus(); });
+      var armed = false, del = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'удалить навык' }, icon('trash'));
+      del.addEventListener('click', function () {
+        if (!armed) { armed = true; del.classList.add('armed'); setTimeout(function () { armed = false; del.classList.remove('armed'); }, 2500); return; }
+        arr.splice(i, 1); save(); showSkillbar(); openSkills();
+      });
+      box.append(h('div', { class: 'grow sk' }, icon('bolt'), use, del));
+    });
+    var add = h('button', { class: 'btn solid block', type: 'button' }, icon('plus'), h('span', { text: 'Добавить файл' }));
+    add.addEventListener('click', function () { $('#skillfile').click(); });
+    openSheet([
+      backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
+      h('h2', { text: 'Навыки' }),
+      h('p', { class: 'cap', text: 'Навык это готовая инструкция. Загрузи файл .txt или .md: первой строкой команда, дальше текст инструкции. Напиши команду в чате, и она сработает.' }),
+      h('pre', { class: 'sk-ex' }, h('code', { text: '/short-text\nОтвечай коротко: не больше трёх предложений, без вступлений.' })),
+      h('p', { class: 'cap', text: '«/short-text вопрос» применит навык к одному сообщению, а просто «/short-text» включит его на весь чат. «/off» выключит.' }),
+      h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Мои навыки' }), h('span', { class: 'fcnt', text: arr.length + (lim().skills < 1e9 ? ' из ' + lim().skills : '') })),
+      box, add
+    ], true);
+  }
+  $('#skillfile').addEventListener('change', function (e) { addSkillFiles(e.target.files); e.target.value = ''; });
+
   /* ---------- меню «+» у поля ввода ---------- */
   var plusPop = null;
   function closePlus() { if (!plusPop) return; var p = plusPop; plusPop = null; p.classList.add('out'); setTimeout(function () { p.remove(); }, 180); $('#pick').classList.remove('on'); }
@@ -1097,6 +1328,7 @@
       item('Фото', 'image', function () { $('#file').click(); }),
       item('Файлы', 'file', function () { $('#docfile').click(); }),
       item('Добавить в проект', 'folder', pickProjectForNew),
+      item('Навыки', 'bolt', openSkills),
       item('Память', 'brain', openMemory));
     var r = $('#pick').getBoundingClientRect();
     plusPop.style.left = Math.max(10, r.left) + 'px'; plusPop.style.bottom = (window.innerHeight - r.top + 10) + 'px';
@@ -1265,15 +1497,25 @@
     clearError();
     var mm = /^\s*запомни(?:те)?[,:]?\s+(?:что\s+)?([\s\S]{3,200})$/i.exec(text);
     if (mm && S.settings.memOn !== false) addMemory(mm[1].trim().replace(/[.!\s]+$/, ''), true);
+    var sk0 = /^\s*\/([^\s]+)\s*$/.exec(text);
+    if (sk0 && !atts.length) {
+      var kk = skillByCmd(sk0[1]), cc = curChat();
+      if (kk || sk0[1].toLowerCase() === 'off') {
+        cc = ensureChat();
+        if (kk) { setStick(cc, kk); toast('навык /' + kk.cmd + ' включён на весь чат'); } else { setStick(cc, null); toast('навык выключен'); }
+        delete drafts[draftKey]; ta.value = ''; draftKey = dKey(); storeDraft(); closeSkillPop(); grow(); syncSend(); save(); renderAll();
+        return;
+      }
+    }
     var c = ensureChat(), first = !c.msgs.length;
     var pics = atts.filter(function (a) { return !a.kind; }), docs = atts.filter(function (a) { return a.kind === 'file'; });
     var m = { id: uid(), role: 'user', text: text, thumbs: pics.map(function (a) { return a.thumb; }), full: pics.map(function (a) { return a.full; }), files: docs.map(function (a) { return { name: a.name, text: a.text }; }) };
     c.msgs.push(m); c.updated = Date.now();
     if (first) c.title = makeTitle(text || (docs[0] ? docs[0].name : ''));
     save();
-    ta.value = ''; atts = []; renderAtts(); grow(); syncSend();
+    delete drafts[draftKey]; ta.value = ''; draftKey = dKey(); storeDraft(); atts = []; renderAtts(); grow(); syncSend();
     hero.hidden = true; updateHeader();
-    chat.append(msgEl(m, true));
+    chat.append(msgEl(m, true)); showSkillbar(); closeSkillPop();
     toBottom(true);
     request();
   }
@@ -1288,6 +1530,7 @@
     });
     recent.forEach(function (m, i) {
       var o = { role: m.role, content: m.text || '' }, note = '';
+      if (m.role === 'user') { var so = skillOf(null, m.text); if (so && so.inline) o.content = so.rest || 'Выполни инструкцию навыка.'; }
       if (m.role === 'user' && m.files && m.files.length) {
         if (i === fileAt && m.files.some(function (f) { return f.text; })) {
           var share = Math.floor(15000 / m.files.length);
@@ -1306,6 +1549,13 @@
       if (i === imgAt) outImg = out.length;
       out.push(o);
     });
+    var lastU = null; for (var q = c.msgs.length - 1; q >= 0; q--) { if (c.msgs[q].role === 'user') { lastU = c.msgs[q]; break; } }
+    var act = lastU ? (skillOf(null, lastU.text) || skillOf(c, '')) : null;
+    if (act && out.length) {
+      var at = out.length - 1;
+      out.splice(at, 0, { role: 'user', content: 'Навык «' + act.skill.name + '». Следуй этим инструкциям в ответе на моё следующее сообщение' + (act.inline ? '' : ' и на все следующие') + ':\n' + act.skill.text.slice(0, SK_MAX) });
+      if (outImg >= at) outImg++;
+    }
     return { list: out, imgAt: outImg, images: imgAt >= 0 ? recent[imgAt].full : [] };
   }
 
@@ -1367,7 +1617,7 @@
   }
 
   sendBtn.addEventListener('click', function () { if (busy) stopGen(); else send(); });
-  ta.addEventListener('input', function () { grow(); syncSend(); });
+  ta.addEventListener('input', function () { grow(); syncSend(); storeDraft(); skillHint(); });
   var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   ta.addEventListener('keydown', function (e) {
     // на компьютере enter отправляет, shift+enter новая строка; на телефоне enter это новая строка
@@ -1419,6 +1669,7 @@
       top, up, h('i', { class: 'psep' }),
       item('Персонализация', 'user', openPersonal),
       item('Память', 'brain', openMemory, memN ? String(memN) : ''),
+      item('Навыки', 'bolt', openSkills, skillList().length ? String(skillList().length) : ''),
       item('Тарифы', 'star', function () { openPlans(); }, planName),
       h('i', { class: 'psep' }),
       item('Настройки', 'gear', openMenu));
