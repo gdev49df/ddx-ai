@@ -548,7 +548,7 @@
   function updateHeader() {
     var c = curChat(), pr = projectById(c ? c.project : S.pendingProject);
     $('#title').textContent = c ? c.title : 'DDX AI'; $('#title').classList.toggle('is-brand', !c);
-    var has = !!(c && c.msgs.length); $('#find').style.display = has ? '' : 'none'; $('#more').style.display = '';
+    var has = !!(c && c.msgs.length); $('#more').style.display = '';
     $('#kicker').textContent = pr ? pr.name : (c ? 'Чат' : 'Личный помощник');
     var capText = cap(pr
       ? 'проект «' + pr.name + '»: чат учитывает его контекст. спроси что угодно или пришли фото.'
@@ -1155,7 +1155,6 @@
         opt(c.pinned ? 'открепить' : 'закрепить', 'pin', function () { togglePin(c); listsHome(); }),
         opt('переименовать', 'edit', function () { renameChat(c); }),
         opt(pr ? 'перенести в другой проект' : 'в проект', 'folder', function () { moveChat(c); }),
-        opt('поиск в чате', 'search', function () { closeSheet(); if (S.cur !== c.id) openChat(c.id); setDrawer(false); setTimeout(openFind, 60); }),
         opt('экспорт в файл', 'file', function () { exportChat(c); }),
         opt('поделиться чатом', 'share', function () { shareText(chatText(c), c.title); }),
         twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); listsHome(); }, 'danger'))
@@ -2351,7 +2350,6 @@
   $('#chats').append(icon('list')); $('#chats').addEventListener('click', function () { openChats(); });
   $('#newchat').append(icon('plus')); $('#newchat').addEventListener('click', function () { newChat(S.cur ? (curChat() || {}).project : S.pendingProject); });
   $('#left').addEventListener('click', function () { openPlans(); });
-  $('#find').append(icon('search')); $('#find').addEventListener('click', openFind);
   $('#more').append(icon('more'));
   // выпадающее меню действий с чатом (три точки в шапке)
   var popEl = null;
