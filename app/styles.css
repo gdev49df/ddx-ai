@@ -1214,3 +1214,11 @@ svg.logo.herologo polygon:nth-child(6) { animation-delay: .40s, 2.5s; }
 /* прокрутка и выделение */
 ::selection { background: rgb(var(--w) / .22); }
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--w) / .16) transparent; }
+
+/* шлифовка v2: пузырь мягче, плавное появление ответа, аккуратные отступы */
+.msg.me:not(.editing) { background: linear-gradient(180deg, var(--paper), color-mix(in srgb, var(--paper) 84%, #7d7d86)); box-shadow: 0 6px 20px rgb(0 0 0 / .26), inset 0 1px 0 rgb(255 255 255 / .45); }
+.msg.ai .md > :last-child { margin-bottom: 0; }
+.msg.ai.fresh .blk, .msg.ai.fresh .md > * { animation: rise .6s var(--ease) both; }
+.sugg { padding-bottom: 6px; }
+.composer .card .tchip { transition: background .25s, color .25s, border-color .25s; }
+.fade { background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg) 85%, transparent) 60%, var(--bg)); }
