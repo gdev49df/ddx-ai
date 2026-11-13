@@ -1003,3 +1003,15 @@ select.sel { appearance: none; -webkit-appearance: none; color: var(--ink); }
 .membar .sk-x svg.i { width: 15px; height: 15px; }
 .langs.one { grid-template-columns: 1fr; }
 .side-brand { margin: 12px 6px 14px; min-height: 36px; }
+
+/* действия под ответом ИИ: только иконки, время при наведении */
+.msg-actions { align-items: center; gap: 2px; margin: 6px -8px 0; }
+.msg-actions .ab { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 10px; background: none; color: var(--mute); transition: background .2s, color .2s, transform .3s var(--spring); }
+.msg-actions .ab svg.i { width: 17px; height: 17px; }
+.msg-actions .ab:active { transform: scale(.88); }
+.msg-actions .ab.on { color: var(--ink); background: rgb(var(--w) / .1); }
+.msg-actions .ab.pop svg { color: var(--ink); }
+@media (hover: hover) { .msg-actions .ab:hover { background: rgb(var(--w) / .08); color: var(--ink); } }
+.msg-actions .mtime { margin-left: 8px; font-size: 12.5px; color: var(--mute); opacity: 0; transition: opacity .25s; white-space: nowrap; }
+.msg.ai:hover .mtime, .msg.ai:focus-within .mtime { opacity: 1; }
+@media (hover: none) { .msg-actions .mtime { opacity: .8; } }

@@ -5,7 +5,7 @@
 
   // адрес воркера
   var API = 'https://ddx-ai.wsmp.workers.dev/';
-  var VERSION = 'v2.9';
+  var VERSION = 'v3.0';
   var KEY = 'wchat3', KEY_V2 = 'wchat2', KEY_OLD = 'wchat', KEY_DEV = 'wchat-dev', KEY_LEFT = 'wchat-left', KEY_CODE = 'wchat-code', KEY_SUB = 'wchat-sub', WA = '77751213271';
   var MAX_IMG = 4;          // фото в одном сообщении
   var BUDGET = 440000;      // символов base64 на все фото одного запроса (воркер принимает до 600 кб всего)
@@ -75,6 +75,8 @@
     bolt: '<path d="M13 3L5.5 13.5H11L10 21l7.5-10.5H12z"/>',
     edit: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',
     trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l.8 12.5h8.4L17 7M10.5 11v5M13.5 11v5"/>',
+    thumbup: '<path d="M7 11v9H4v-9h3z"/><path d="M7 11l4-7c1.4 0 2.4 1.2 2.1 2.6L12.6 9H18a2 2 0 0 1 2 2.4l-1.2 6A2 2 0 0 1 16.9 19H7"/>',
+    thumbdown: '<g transform="rotate(180 12 12)"><path d="M7 11v9H4v-9h3z"/><path d="M7 11l4-7c1.4 0 2.4 1.2 2.1 2.6L12.6 9H18a2 2 0 0 1 2 2.4l-1.2 6A2 2 0 0 1 16.9 19H7"/></g>',
     user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>'
   };
   function icon(name) {
@@ -112,7 +114,7 @@
 
   function cleanMsgs(list) {
     return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
-      .map(function (m) { return { id: uid(), role: m.role, text: String(m.text != null ? m.text : (m.content || '')), thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [] }; });
+      .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [] }; });
   }
   function load() {
     var d = null;
@@ -145,7 +147,7 @@
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
         return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
-          msgs: c.msgs.slice(-80).map(function (m) { return { role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }) }; }) };
+          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }) }; }) };
       })
     });
   }
@@ -495,15 +497,26 @@
       if (fresh) el.classList.add('rise');
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
-      var copy = h('button', { class: 'link', type: 'button' }, icon('copy'), h('span', { text: 'копировать' }));
-      copy.addEventListener('click', function () {
-        var done = function () { copy.replaceChildren(icon('check'), h('span', { text: 'скопировано' })); copy.classList.add('pop'); setTimeout(function () { copy.classList.remove('pop'); }, 700); setTimeout(function () { copy.replaceChildren(icon('copy'), h('span', { text: 'копировать' })); }, 1600); };
+      var ib = function (ic, label, fn) { var b = h('button', { class: 'ab', type: 'button', 'aria-label': label, title: label }, icon(ic)); b.addEventListener('click', function (e) { e.stopPropagation(); fn(b); }); return b; };
+      var copy = ib('copy', 'копировать', function (b) {
+        var done = function () { b.replaceChildren(icon('check')); b.classList.add('pop'); setTimeout(function () { b.classList.remove('pop'); }, 700); setTimeout(function () { b.replaceChildren(icon('copy')); }, 1600); };
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text).then(done, function () { toast('не получилось скопировать'); });
         else toast('копирование недоступно');
       });
-      var shr = h('button', { class: 'link', type: 'button' }, icon('share'), h('span', { text: 'поделиться' }));
-      shr.addEventListener('click', function () { shareText(m.text, 'ответ DDX AI'); });
-      el.append(h('div', { class: 'msg-actions' }, copy, shr));
+      var up = ib('thumbup', 'хороший ответ', function () { setFb(m.fb === 'up' ? '' : 'up'); });
+      var down = ib('thumbdown', 'плохой ответ', function () { setFb(m.fb === 'down' ? '' : 'down'); });
+      var setFb = function (v) { m.fb = v; save(); up.classList.toggle('on', v === 'up'); down.classList.toggle('on', v === 'down'); if (v) toast(v === 'up' ? 'Спасибо за оценку' : 'Спасибо, учту'); };
+      up.classList.toggle('on', m.fb === 'up'); down.classList.toggle('on', m.fb === 'down');
+      var cc = curChat(), isLast = !!(cc && cc.msgs[cc.msgs.length - 1] === m);
+      var again = isLast ? ib('refresh', 'повторить', function () {
+        var c2 = curChat(); if (!c2 || busy) { toast('дождись ответа или нажми стоп'); return; }
+        if (c2.msgs[c2.msgs.length - 1] !== m) return;
+        c2.msgs.pop(); save(); renderAll(); request();
+      }) : null;
+      var shr = ib('share', 'поделиться', function () { shareText(m.text, 'ответ DDX AI'); });
+      var when = m.at ? (function () { var d = new Date(m.at), now = new Date(), loc = window.I18N ? I18N.locale() : 'ru-RU', tm = d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
+        return d.toDateString() === now.toDateString() ? tm : d.toLocaleDateString(loc, { day: 'numeric', month: 'short' }) + ', ' + tm; })() : '';
+      el.append(h('div', { class: 'msg-actions' }, copy, up, down, again, shr, when ? h('span', { class: 'mtime', text: when, raw: 1, 'data-notr': '1' }) : null));
       if (fresh) { el.classList.add('fresh'); streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
     }
     return el;
@@ -1216,6 +1229,7 @@
     ['emoji', 'Эмодзи', [['', 'Авто', ''], ['none', 'Не нужны', 'Не используй эмодзи.'], ['some', 'Иногда', 'Эмодзи изредка уместны.'], ['lots', 'Чаще', 'Используй эмодзи охотно.']]]
   ];
   function openPersonal() {
+    if (wide() && !paneHost) { openSettingsWin('pers'); return; }
     var st = S.settings, pick = {};
     PERS.forEach(function (g) { pick[g[0]] = st[g[0]] != null ? st[g[0]] : (g[0] === 'style' ? 'normal' : ''); });
     var name = field('input', { type: 'text', maxlength: '40', placeholder: 'Как к тебе обращаться', value: st.name || '', 'aria-label': 'имя' });
@@ -1339,6 +1353,7 @@
     var r = c.getBoundingClientRect(); c.style.setProperty('--mx', (e.clientX - r.left) + 'px'); c.style.setProperty('--my', (e.clientY - r.top) + 'px');
   }, { passive: true });
   function openPlans(period) {
+    if (wide() && !paneHost) { openSettingsWin('plans'); return; }
     var year = period === 'year';
     var plansBox = h('div', { class: 'plans' }), segBtns = [];
     var cards = function () {
@@ -1391,9 +1406,7 @@
           } else note.textContent = x.j.error === 'expired' ? 'этот тариф уже закончился' : x.j.error === 'used' ? (x.j.detail || 'этот код уже привязан к другому аккаунту') : x.j.error === 'mode' ? 'воркер ещё не обновлён: задеплой worker/full-worker.js' : 'такого кода нет. проверь, что ввёл его без ошибок';
         }, function () { go.disabled = false; note.textContent = 'нет связи с воркером'; });
     });
-    var off = sub ? twice('отключить код на этом устройстве', 'точно? нажми ещё раз', function () {
-      subCode = ''; sub = null; ls.set(KEY_CODE, ''); ls.set(KEY_SUB, 'null'); lastLeft = null; showLeft(); refreshSide(); openPlans(period);
-    }) : null;
+    var off = null;
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
       h('h2', { text: 'Тарифы' }),
@@ -1610,6 +1623,7 @@
     openSheet([backLink(openAccount), h('h2', { text: 'Удалить аккаунт' }), h('p', { class: 'cap', text: 'Аккаунт и копия данных в облаке удалятся. Чаты на этом устройстве останутся. Тариф, привязанный к аккаунту, пропадёт вместе с ним.' }), h('div', { class: 'group solo stack' }, pw), err, ok]);
   }
   function openAccount() {
+    if (wide() && !paneHost) { openSettingsWin('account'); return; }
     if (!acct) { openAuth('in'); return; }
     var st = S.settings, u = acct.user || {};
     var saveSoft = function () { save(); renderAll(); };
@@ -1683,6 +1697,7 @@
   /* ---------- окно настроек на компьютере: слева разделы, справа содержимое ---------- */
   var swSec = 'general';
   function openUsage() {
+    if (wide() && !paneHost) { openSettingsWin('usage'); return; }
     var L = lim(), big = function (n) { return n >= 1e9; };
     var planName = sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free';
     var used = null, total = lastLeft && lastLeft.limit ? lastLeft.limit : 0;
@@ -1721,6 +1736,7 @@
     ], true);
   }
   function openData() {
+    if (wide() && !paneHost) { openSettingsWin('data'); return; }
     var del = twice('Удалить все чаты', 'Точно удалить? Нажми ещё раз', function () {
       S.chats.forEach(function (c) { goneAdd(c.id); }); S.chats = []; S.cur = null; S.pendingProject = null; save(); clearError(); renderAll(); toast('Чаты удалены');
     }, 'danger');
@@ -1732,6 +1748,7 @@
     ], true);
   }
   function openGeneral() {
+    if (wide() && !paneHost) { openSettingsWin('general'); return; }
     var cur = (window.WTheme && WTheme.mode()) || 'dark';
     var seg = h('div', { class: 'seg3' }, [['auto', 'Системная'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(function (x) {
       var b = h('button', { type: 'button', class: x[0] === cur ? 'on' : '', text: x[1] });
@@ -1843,6 +1860,7 @@
   }
   function swRow(title, desc, sw) { return h('div', { class: 'grow2' }, h('div', { class: 'gtxt' }, h('b', { text: title }), h('span', { text: desc })), sw); }
   function openMemory() {
+    if (wide() && !paneHost) { openSettingsWin('memory'); return; }
     var st = S.settings, list = h('div', { class: 'group memlist' }), cnt = h('span', { class: 'fcnt' });
     var fill = function () {
       list.replaceChildren();
@@ -1989,6 +2007,7 @@
   }
 
   function openSkills() {
+    if (wide() && !paneHost) { openSettingsWin('skills'); return; }
     var arr = skillList(), box = h('div', { class: 'group' });
     if (!arr.length) box.append(h('p', { class: 'cap pad', text: 'Пока нет skills. Загрузи файл .txt или .md.' }));
     arr.forEach(function (k, i) {
@@ -2290,7 +2309,7 @@
         }).replace(/\n{3,}/g, '\n\n').trim();
         if (wantTitle && ttl) { c.title = ttl.charAt(0).toUpperCase() + ttl.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
         if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
-        var m = { id: uid(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
+        var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [] };
         c.msgs.push(m); c.updated = Date.now(); save();
         if (typeof x.j.left === 'number') { lastLeft = { day: dayStr(), left: x.j.left, limit: x.j.limit || 0, plan: x.j.plan || 'free' }; ls.set(KEY_LEFT, JSON.stringify(lastLeft)); showLeft(); }
         if (here()) {
