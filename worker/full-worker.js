@@ -670,6 +670,25 @@ export default {
     if (!allowed.includes(origin)) return new Response(JSON.stringify({ error: 'origin ' + origin + ' не разрешён' }), { status: 403, headers: Object.assign({ 'Content-Type': 'application/json' }, cors(origin || '*')) });
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
     const path = new URL(req.url).pathname;
+    // публичная ссылка на чат: хранится в KV 90 дней, текст без фото
+    if (path === '/share/put' && req.method === 'POST') {
+      if (!env.KV) return reply(503, { error: 'no kv' }, origin);
+      const raw0 = await req.text();
+      if (raw0.length > 200000) return reply(413, { error: 'too big' }, origin);
+      let b0; try { b0 = JSON.parse(raw0); } catch (e) { return reply(400, { error: 'json' }, origin); }
+      const msgs = (Array.isArray(b0.msgs) ? b0.msgs : []).slice(-120).map((m) => ({ r: m && m.r === 'u' ? 'u' : 'a', t: String((m && m.t) || '').slice(0, 8000) })).filter((m) => m.t);
+      if (!msgs.length) return reply(400, { error: 'empty' }, origin);
+      const id = b64u(crypto.getRandomValues(new Uint8Array(9)));
+      await env.KV.put('share:' + id, JSON.stringify({ title: String(b0.title || 'Чат').slice(0, 100), msgs, at: Date.now() }), { expirationTtl: 90 * 86400 });
+      return reply(200, { id }, origin);
+    }
+    if (path === '/share/get' && req.method === 'GET') {
+      if (!env.KV) return reply(503, { error: 'no kv' }, origin);
+      const id = new URL(req.url).searchParams.get('id') || '';
+      if (!/^[A-Za-z0-9_-]{6,20}$/.test(id)) return reply(400, { error: 'id' }, origin);
+      const v = await env.KV.get('share:' + id);
+      return v ? new Response(v, { status: 200, headers: Object.assign({ 'Content-Type': 'application/json' }, cors(origin)) }) : reply(404, { error: 'not found' }, origin);
+    }
     if (path.indexOf('/push/') === 0) {
       try { return await pushRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'push', detail: String(e.message || e).slice(0, 200) }, origin); }
     }

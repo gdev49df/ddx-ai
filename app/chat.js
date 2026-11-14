@@ -1254,6 +1254,19 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { toast('скопировал: поделиться можно вставкой'); }, function () { toast('не получилось поделиться'); });
     else toast('поделиться тут нельзя');
   }
+  // ссылка на чат: текст уходит в воркер, фото не передаются
+  function shareChatLink(c) {
+    var msgs = c.msgs.filter(function (m) { return m.text; }).map(function (m) { return { r: m.role === 'user' ? 'u' : 'a', t: m.text }; });
+    if (!msgs.length) { toast('в чате пока пусто'); return; }
+    toast('делаю ссылку…');
+    api('/share/put', { title: c.title, msgs: msgs }).then(function (r) {
+      if (!r.ok || !r.j.id) { toast(r.st === 503 ? 'на сервере не включены ссылки' : 'не получилось сделать ссылку'); return; }
+      var url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'share/#' + r.j.id;
+      if (navigator.share && window.matchMedia('(pointer: coarse)').matches) navigator.share({ title: c.title || 'DDX AI', url: url }).catch(function () {});
+      else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { toast('ссылка скопирована'); }, function () { toast(url); });
+      else toast(url);
+    }, function () { toast('нет связи с сервером'); });
+  }
   function exportChat(c) {
     var name = (c.title || 'чат').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 50) + '.md';
     saveFile(name, chatText(c), 'text/markdown');
@@ -1319,7 +1332,7 @@
         opt('экспорт в файл', 'file', function () { exportChat(c); }),
         opt('экспорт в docx', 'doc', function () { closeSheet(); exportDocx(c); }),
         opt('экспорт в pdf', 'doc', function () { closeSheet(); exportPdf(c); }),
-        opt('поделиться чатом', 'share', function () { shareText(chatText(c), c.title); }),
+        opt('поделиться чатом', 'share', function () { closeSheet(); shareChatLink(c); }),
         twice('удалить чат', 'точно удалить? нажми ещё раз', function () { deleteChat(c); listsHome(); }, 'danger'))
     ]);
   }
@@ -1410,7 +1423,7 @@
       });
     };
     drawFiles();
-    var pin = h('input', { type: 'file', accept: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.js,.py,.java,.sql,.yml,.yaml,.tex,.docx,text/plain', multiple: true, hidden: true });
+    var pin = h('input', { type: 'file', accept: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.js,.py,.java,.sql,.yml,.yaml,.tex,.docx,.xlsx,.pptx,.pdf,text/plain', multiple: true, hidden: true });
     pin.addEventListener('change', function () {
       var room = lim().pfiles - pfiles.length, list = Array.prototype.slice.call(pin.files || []); pin.value = '';
       if (room <= 0) { limitToast('На тарифе ' + planWord() + ' до ' + lim().pfiles + ' файлов в проекте'); return; }
@@ -2454,33 +2467,94 @@
     }));
     measure();
   }
-  var DOC_RE = /\.(txt|md|markdown|csv|tsv|json|log|xml|html?|css|js|ts|py|java|c|cpp|cs|go|rs|sql|ya?ml|ini|srt|tex|docx)$/i, MAX_FILE = 15000;   // потолок; реальный лимит символов зависит от тарифа: lim().chars
-  function readDocx(file) {
+  var DOC_RE = /\.(txt|md|markdown|csv|tsv|json|log|xml|html?|css|js|ts|py|java|c|cpp|cs|go|rs|sql|ya?ml|ini|srt|tex|docx|xlsx|pptx|pdf)$/i, MAX_FILE = 15000;   // потолок; реальный лимит символов зависит от тарифа: lim().chars
+  // читает из zip (docx/xlsx/pptx) нужные xml-файлы целиком: {имя: текст}
+  function zipTexts(file, want) {
     return file.arrayBuffer().then(function (buf) {
-      var v = new DataView(buf), u8 = new Uint8Array(buf), i, eocd = -1;
+      var v = new DataView(buf), u8 = new Uint8Array(buf), i, eocd = -1, dec = new TextDecoder(), jobs = [];
       for (i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 70000); i--) { if (v.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
       if (eocd < 0) throw new Error('zip');
-      var n = v.getUint16(eocd + 10, true), p = v.getUint32(eocd + 16, true), dec = new TextDecoder();
+      var n = v.getUint16(eocd + 10, true), p = v.getUint32(eocd + 16, true);
       for (i = 0; i < n; i++) {
         var method = v.getUint16(p + 10, true), csize = v.getUint32(p + 20, true), nl = v.getUint16(p + 28, true), el = v.getUint16(p + 30, true), cl = v.getUint16(p + 32, true), off = v.getUint32(p + 42, true);
         var name = dec.decode(u8.subarray(p + 46, p + 46 + nl));
-        if (name === 'word/document.xml') {
+        if (want.test(name)) (function (name, method, csize, off) {
           var lnl = v.getUint16(off + 26, true), lel = v.getUint16(off + 28, true), start = off + 30 + lnl + lel, data = u8.subarray(start, start + csize);
-          if (method === 0) return dec.decode(data);
+          if (method === 0) { jobs.push(Promise.resolve([name, dec.decode(data)])); return; }
           if (typeof DecompressionStream === 'undefined') throw new Error('nods');
           var ds = new DecompressionStream('deflate-raw'), wr = ds.writable.getWriter(); wr.write(data); wr.close();
-          return new Response(ds.readable).arrayBuffer().then(function (ab) { return dec.decode(ab); });
-        }
+          jobs.push(new Response(ds.readable).arrayBuffer().then(function (ab) { return [name, dec.decode(ab)]; }));
+        })(name, method, csize, off);
         p += 46 + nl + el + cl;
       }
-      throw new Error('nodoc');
-    }).then(function (xml) {
-      return xml.replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n').replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '')
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n');
+      return Promise.all(jobs).then(function (a) { var o = {}; a.forEach(function (x) { o[x[0]] = x[1]; }); return o; });
+    });
+  }
+  function unxml(s) { return s.replace(/&#x([0-9a-f]+);/gi, function (_, h) { return String.fromCodePoint(parseInt(h, 16)); }).replace(/&#(\d+);/g, function (_, d) { return String.fromCodePoint(+d); }).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&'); }
+  function numKey(a, b) { return (parseInt(a.replace(/\D+/g, ''), 10) || 0) - (parseInt(b.replace(/\D+/g, ''), 10) || 0); }
+  function readDocx(file) {
+    return zipTexts(file, /^word\/document\.xml$/).then(function (o) {
+      var xml = o['word/document.xml']; if (xml == null) throw new Error('nodoc');
+      return unxml(xml.replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n').replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '')).replace(/\n{3,}/g, '\n\n');
+    });
+  }
+  function readXlsx(file) {
+    return zipTexts(file, /^xl\/(sharedStrings\.xml|worksheets\/sheet\d+\.xml|workbook\.xml)$/).then(function (o) {
+      var sst = [], m, re = /<si>([\s\S]*?)<\/si>/g;
+      while ((m = re.exec(o['xl/sharedStrings.xml'] || ''))) sst.push(unxml((m[1].match(/<t[^>]*>([\s\S]*?)<\/t>/g) || []).map(function (t) { return t.replace(/<[^>]+>/g, ''); }).join('')));
+      var names = []; (o['xl/workbook.xml'] || '').replace(/<sheet [^>]*name="([^"]*)"/g, function (_, n) { names.push(unxml(n)); });
+      var out = [];
+      Object.keys(o).filter(function (k) { return /worksheets\/sheet/.test(k); }).sort(numKey).forEach(function (k, si) {
+        out.push('## ' + (names[si] || 'Лист ' + (si + 1)));
+        (o[k].match(/<row[\s\S]*?<\/row>/g) || []).forEach(function (row) {
+          var cells = []; row.replace(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, function (_, at, inner) {
+            var ref = /r="([A-Z]+)/.exec(at), col = 0; if (ref) ref[1].split('').forEach(function (ch) { col = col * 26 + ch.charCodeAt(0) - 64; });
+            var val = '', vm = /<v>([\s\S]*?)<\/v>/.exec(inner || ''), tm = /t="(\w+)"/.exec(at);
+            if (tm && tm[1] === 's' && vm) val = sst[+vm[1]] || ''; else if (tm && tm[1] === 'inlineStr') val = unxml((inner || '').replace(/<[^>]+>/g, '')); else if (vm) val = unxml(vm[1]);
+            if (col) cells[col - 1] = String(val).replace(/[\t\n]+/g, ' ');
+          });
+          var line = Array.from(cells, function (x) { return x == null ? '' : x; }).join('\t').replace(/\t+$/, '');
+          if (line) out.push(line);
+        });
+      });
+      return out.join('\n');
+    });
+  }
+  function readPptx(file) {
+    return zipTexts(file, /^ppt\/slides\/slide\d+\.xml$/).then(function (o) {
+      return Object.keys(o).sort(numKey).map(function (k, i) {
+        return '## Слайд ' + (i + 1) + '\n' + unxml(o[k].replace(/<\/a:p>/g, '\n').replace(/<[^>]+>/g, '')).replace(/\n{2,}/g, '\n').trim();
+      }).join('\n\n');
+    });
+  }
+  var pdfLib = null;
+  function loadPdfJs() {
+    if (pdfLib) return pdfLib;
+    var base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/';
+    return pdfLib = new Promise(function (res, rej) {
+      var s = document.createElement('script'); s.src = base + 'pdf.min.js'; s.onload = res; s.onerror = function () { pdfLib = null; rej(new Error('nopdf')); }; document.head.appendChild(s);
+    }).then(function () { return fetch(base + 'pdf.worker.min.js'); }).then(function (r) { return r.blob(); }).then(function (b) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(b); return window.pdfjsLib;
+    });
+  }
+  function readPdf(file) {
+    return Promise.all([loadPdfJs(), file.arrayBuffer()]).then(function (x) {
+      return x[0].getDocument({ data: x[1] }).promise.then(function (doc) {
+        var out = [], lim0 = lim().chars, len = 0, pages = Math.min(doc.numPages, 60);
+        function page(n) {
+          if (n > pages || len > lim0) return out.join('\n\n');
+          return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
+            var t = '', lastY = null; tc.items.forEach(function (it) { var y = it.transform[5]; if (lastY !== null && Math.abs(y - lastY) > 4) t += '\n'; else if (t && !/\s$/.test(t)) t += ' '; t += it.str; lastY = y; });
+            t = t.replace(/[ \t]+\n/g, '\n').trim(); if (t) { out.push(t); len += t.length; }
+            return page(n + 1);
+          });
+        }
+        return page(1);
+      });
     });
   }
   function readDoc(file) {
-    return (/\.docx$/i.test(file.name) ? readDocx(file) : file.text()).then(function (t) {
+    return (/\.docx$/i.test(file.name) ? readDocx(file) : /\.xlsx$/i.test(file.name) ? readXlsx(file) : /\.pptx$/i.test(file.name) ? readPptx(file) : /\.pdf$/i.test(file.name) ? readPdf(file) : file.text()).then(function (t) {
       t = String(t).replace(/\u0000/g, '').trim();
       if (!t) throw new Error('empty');
       return { id: uid(), kind: 'file', name: file.name.slice(0, 60), text: t.slice(0, lim().chars), cut: t.length > lim().chars };
@@ -2496,14 +2570,13 @@
         atts.push(a); renderAtts();
         if (a.cut) toast('Файл длинный: прочитаю первые ' + money(lim().chars) + ' символов');
       }, function (e) {
-        toast(e && e.message === 'nods' ? 'этот браузер не открывает docx' : e && e.message === 'empty' ? 'в файле нет текста' : 'не получилось прочитать «' + f.name + '»');
+        toast(e && e.message === 'nods' ? 'этот браузер не открывает такие файлы' : e && e.message === 'nopdf' ? 'не загрузился модуль pdf, проверь интернет' : e && e.message === 'empty' ? (/\.pdf$/i.test(f.name) ? 'в pdf нет текста (скан): пришли фото страницы' : 'в файле нет текста') : 'не получилось прочитать «' + f.name + '»');
       }).then(function () { loading--; syncSend(); });
     });
   }
   function addFiles(files) {
     var all = Array.prototype.slice.call(files || []);
     var docs = all.filter(function (f) { return DOC_RE.test(f.name || '') && !/^image\//.test(f.type); });
-    if (all.some(function (f) { return /\.pdf$/i.test(f.name || ''); })) toast('pdf пока не читаю: скопируй текст или пришли фото страницы');
     if (docs.length) addDocs(docs);
     return addImages(all);
   }
