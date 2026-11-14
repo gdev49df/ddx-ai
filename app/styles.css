@@ -1515,3 +1515,7 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .vm-end:active { transform: scale(.96); }
 .vm-end svg.i { width: 18px; height: 18px; }
 @media (prefers-reduced-motion: reduce) { .vm-orb, .vm-orb i, .vm-orb::before { animation: none !important; } }
+
+.ucredit { margin: 6px 0 4px; padding: 14px 16px; border-radius: 16px; background: rgb(var(--w) / .05); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.ucredit b { font-size: 15px; }
+.ucredit .cap { margin: 0 0 6px; }

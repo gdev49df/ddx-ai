@@ -778,7 +778,7 @@
     el.hidden = true;
     if (!lastLeft) return;
     var paid = sub && lastLeft.plan && lastLeft.plan !== 'free';
-    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений в окне 12 часов: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (backAt() ? ' · восстановится в ' + hm(backAt()) : '');
+    el.textContent = cap(paid ? 'тариф ' + sub.plan + ': осталось ' : 'сообщений в окне 6 часов: осталось ') + lastLeft.left + (lastLeft.limit ? ' из ' + lastLeft.limit : '') + (backAt() ? ' · восстановится в ' + hm(backAt()) : '');
     el.classList.toggle('warn', lastLeft.left <= 0);
     if (typeof armLimitNote === 'function') armLimitNote();
   }
@@ -1712,7 +1712,7 @@
     c.pinned = !c.pinned; save(); return true;
   }
   var PLANS = [
-    { id: 'free', name: 'free', price: 0, line: '12 сообщений каждые 12 часов' },
+    { id: 'free', name: 'free', price: 0, line: '12 сообщений каждые 6 часов' },
     { id: 'pro', name: 'pro', price: 1090, limit: 40 },
     { id: 'max', name: 'max', price: 5990, limit: 120, badge: 'популярный', hot: true },
     { id: 'ultra', name: 'ultra', price: 11990, limit: 300, badge: 'выгодно' }
@@ -1720,6 +1720,7 @@
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {
     var L = LIMITS[id], big = function (n) { return n >= 1e9; }, rows = [
+      'В неделю: до ' + money(({ free: 12, pro: 40, max: 120, ultra: 300 }[id] || 12) * 10) + ' сообщений',
       'Голосовой режим: ' + L.voice + ' ответов в день',
       'Фото: до ' + L.photos + ' в сообщении',
       'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
@@ -1763,7 +1764,7 @@
           h('div', { class: 'plan-h' }, h('span', { class: 'plan-n' }, h('span', { class: 'plan-ic' }, icon(PI[p.id] || 'star')), h('span', { text: p.name })),
             h('span', { class: 'plan-tags' }, p.badge ? h('span', { class: 'plan-tag soft', text: p.badge }) : null, cur ? h('span', { class: 'plan-tag', text: 'у тебя' }) : null)),
           priceRow,
-          h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? p.limit + ' сообщений каждые 12 часов' : p.line })),
+          h('p', { class: 'plan-l' }, icon('check'), h('span', { text: p.limit ? p.limit + ' сообщений каждые 6 часов' : p.line })),
           h('i', { class: 'plan-sep' }),
           featureRows(p.id),
           perMsg ? h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: perMsg })) : null,
@@ -2106,7 +2107,7 @@
     if (total) used = Math.max(0, Math.min(total, total - lastLeft.left));
     var pct = total ? Math.round(used / total * 100) : 0;
     refreshLeft(); total = lastLeft && lastLeft.limit ? lastLeft.limit : 0; used = total ? Math.max(0, Math.min(total, total - lastLeft.left)) : null; pct = total ? Math.round(used / total * 100) : 0;
-    var reset = backAt() ? 'Восстановится в ' + hm(backAt()) : 'Скользящее окно: сообщение освобождается через 12 часов';
+    var reset = backAt() ? 'Восстановится в ' + hm(backAt()) : 'Скользящее окно: сообщение освобождается через 6 часов';
     var status = !total ? 'Данные появятся после первого сообщения.' : pct >= 100 ? 'Лимит исчерпан. Он обновится после сброса, или можно перейти на тариф выше.' : pct >= 80 ? 'Лимит почти исчерпан. Запаса хватит ненадолго.' : 'Всё идёт по плану. К сбросу у тебя ещё должен остаться запас.';
     var bar = function (p, warn) { return h('div', { class: 'ubar' + (warn ? ' warn' : '') }, h('i', { style: 'width:' + Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%' })); };
     var row = function (title, sub2, p, right, warn) {
@@ -2123,13 +2124,53 @@
         vrow.querySelector('.ubar').classList.toggle('warn', p >= 80);
         vrow.querySelector('.ur').textContent = j.used + ' из ' + j.limit;
       }, function () { /* без связи цифры не показываем */ });
+    var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'], MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    var whenDow = function (t) { var d = new Date(t); return DOW[d.getDay()] + ' ' + hm(t); };
+    var whenDate = function (t) { var d = new Date(t); return DOW[d.getDay()] + ', ' + d.getDate() + ' ' + MON[d.getMonth()] + ', ' + hm(t); };
+    var setRow = function (el, p, sub2, right) {
+      el.querySelector('.ubar i').style.width = Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%';
+      el.querySelector('.ubar').classList.toggle('warn', p >= 80);
+      if (sub2 != null) { var sp = el.querySelector('.ul span'); if (sp) sp.textContent = sub2; }
+      el.querySelector('.ur').textContent = right;
+    };
+    var pc = function (n, m) { return m ? Math.min(100, Math.round(n / m * 100)) : 0; };
+    var sessRow = row('Текущая сессия', 'Сброс: каждые 6 часов', pct, total ? 'Использовано ' + pct + '%' : '—', pct >= 80);
+    var weekRow = row('На этой неделе', 'Сброс: пятница 19:00', 0, '—', false);
+    var prodRows = ['Чат', 'Cowork', 'Другое'].map(function (t) { return row(t, null, 0, '0 %', false); });
+    var creditBox = h('div', { class: 'ucredit' }, h('b', { text: 'Сейчас сбросов нет' }), h('p', { class: 'cap', text: 'Когда вы его получите, он появится здесь вместе с датой окончания срока действия.' }));
+    var applyUsage = function (j) {
+      if (!j || !j.week || !sessRow.isConnected) return;
+      var sp = pc(j.used, j.limit), wp = pc(j.week.used, j.week.limit);
+      setRow(sessRow, sp, 'Сброс: ' + (j.used > 0 && j.full ? whenDow(j.full) : 'каждые 6 часов'), 'Использовано ' + sp + '%');
+      setRow(weekRow, wp, 'Сброс: ' + whenDow(j.week.reset), 'Использовано ' + wp + '%');
+      ['chat', 'cowork', 'other'].forEach(function (k, i) { var pp = pc(j.week.prod[k] || 0, j.week.limit); setRow(prodRows[i], pp, null, pp + ' %'); });
+      creditBox.replaceChildren();
+      if (j.credit && j.credit.available) {
+        var go = h('button', { class: 'btn solid', type: 'button', text: 'Использовать сброс' }), armed = 0;
+        go.addEventListener('click', function () {
+          if (!armed) { armed = 1; go.textContent = 'Точно? нажми ещё раз'; setTimeout(function () { armed = 0; if (go.isConnected) go.textContent = 'Использовать сброс'; }, 4000); return; }
+          go.disabled = true;
+          fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'usage-reset', device: device, code: subCode || undefined }) })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+            .then(function (x) { if (x.ok) { lastLeft = null; ls.set(KEY_LEFT, 'null'); showLeft(); applyUsage(x.d); toast('Лимиты сброшены'); } else { toast(x.d.detail || 'Не получилось сбросить'); go.disabled = false; } }, function () { toast('Нет связи с воркером'); go.disabled = false; });
+        });
+        creditBox.append(h('b', { text: 'Доступен 1 сброс лимитов' }), h('p', { class: 'cap', text: 'Действует до ' + whenDate(j.credit.until) }), go);
+      } else {
+        creditBox.append(h('b', { text: 'Сейчас сбросов нет' }), h('p', { class: 'cap', text: 'Следующий сброс будет выдан ' + (j.credit ? whenDate(j.credit.until) : 'в пятницу в 20:00') + '.' }));
+      }
+    };
+    fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'usage', device: device, code: subCode || undefined }) })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(applyUsage, function () { /* без связи остаются прочерки */ });
     var up = h('button', { class: 'btn solid block', type: 'button', text: sub ? 'Сменить тариф' : 'Улучшить тариф' }); up.addEventListener('click', function () { openPlans(); });
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
       h('h2', {}, h('span', { text: 'Твоё использование' }), h('span', { class: 'utag', text: planName })),
-      h('p', { class: 'ustat', text: status }),
-      h('div', { class: 'ugroup' },
-        row('Сообщения за 12 часов', reset + (total ? ' · осталось ' + lastLeft.left + ' из ' + total : ''), pct, total ? pct + '%' : '—', pct >= 80)),
+      h('div', { class: 'ugroup' }, sessRow, weekRow),
+      h('p', { class: 'glabel', text: 'Сброс лимитов' }),
+      h('p', { class: 'cap', text: 'Выдаётся 1 раз в 2 недели, в пятницу в 20:00' }),
+      creditBox,
+      h('p', { class: 'glabel', text: 'Использование на этой неделе по продуктам' }),
+      h('div', { class: 'ugroup' }, prodRows[0], prodRows[1], prodRows[2]),
       h('p', { class: 'glabel', text: 'Лимиты тарифа' }),
       h('div', { class: 'ugroup' },
         vrow,
@@ -2196,7 +2237,7 @@
           'Текст твоего сообщения, прикреплённые файлы и фото отправляются сервису ИИ только для того, чтобы получить ответ.',
           'Память и инструкции добавляются к запросу, чтобы ответы подходили именно тебе. Выключить память можно ниже или в разделе «Память».',
           'Мы не продаём данные, не показываем рекламу и не используем твои чаты для обучения моделей.',
-          'Счётчик сообщений в окне 12 часов привязан к аккаунту, коду активации или устройству. Содержимое чатов в нём не хранится.']); })),
+          'Счётчик сообщений в окне 6 часов привязан к аккаунту, коду активации или устройству. Содержимое чатов в нём не хранится.']); })),
       h('h2', { class: 'ph2', text: 'Предпочтения' }),
       h('div', { class: 'group' },
         swRow('Использовать память', 'Добавлять сохранённые факты о тебе к ответам.', swSwitch('memOn', true)),
@@ -3357,7 +3398,9 @@
       var pctx = projectContext(c, lastQ); if (pctx) body.context = pctx;
       if (instr) body.instructions = instr;
       if (subCode) body.code = subCode;
+      var lastU = c.msgs.length ? c.msgs[c.msgs.length - 1] : null;
       return folderContext(lastQ).then(function (fctx) {
+        body.prod = (fctx || (lastU && lastU.files && lastU.files.length)) ? 'cowork' : 'chat';
         if (fctx) body.context = (fctx + (pctx ? '\n\n' + pctx : '')).slice(0, 8900);
         return fetch(API, {
           method: 'POST', headers: authHdr(), signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
@@ -3409,7 +3452,8 @@
       if (x.st === 429) {
         setLeft({ left: typeof j.left === 'number' ? j.left : 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
         if (j.need > 1 && j.left > 0) { msg = 'для этой модели нужно ' + j.need + ' сообщения из лимита, а осталось ' + j.left + '. Выбери модель попроще или подожди' + until; plans = false; }
-        else msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
+        else if (j.kind === 'week') { msg = 'недельный лимит исчерпан. он обновится в пятницу в 19:00' + (sub ? '. можно взять тариф побольше' : '. или возьми тариф'); plans = true; }
+        else msg = (sub ? 'лимит на 6 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 6 часов исчерпан' + until + '. или возьми тариф'); plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
         msg = j.error === 'expired' ? 'тариф закончился. можно продлить в тарифах' : 'код активации не найден. введи его заново в тарифах';

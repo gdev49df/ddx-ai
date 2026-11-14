@@ -272,6 +272,12 @@ const BUILTIN_CODES = '57e0a2d85c1202b8214a441964feded9d77d6989bfff4242ce78ab2ac
 // CODES-END
 
 const VOICE_Q = { free: 5, pro: 30, max: 100, ultra: 300 };   // голосовых ответов нейроголосом в день
+
+// неделя сбрасывается в пятницу в 19:00, сброс лимитов выдаётся раз в 2 недели в пятницу в 20:00 (время по TZ_OFFSET, по умолчанию +5)
+const WEEK_MS = 7 * 86400000, WEEK_MULT = 10;
+const FRI = 86400000;   // 2 января 1970, пятница
+const weekOf = (env, now) => { const tz = Number(env.TZ_OFFSET || 5) * 3600000, b0 = FRI + 19 * 3600000, idx = Math.floor((now + tz - b0) / WEEK_MS); return { idx: idx, end: b0 + (idx + 1) * WEEK_MS - tz }; };
+const creditOf = (env, now) => { const tz = Number(env.TZ_OFFSET || 5) * 3600000, c0 = FRI + 20 * 3600000, p = 14 * 86400000, idx = Math.floor((now + tz - c0) / p); return { idx: idx, until: c0 + (idx + 1) * p - tz }; };
 const FREE_Q = { ask: 10, food: 2 };
 const PRO_Q = { ask: 40, food: 15 };
 const LIFE_Q = { ask: 1000, food: 300 };   // Founder Lifetime: практически без лимитов
@@ -895,12 +901,12 @@ export default {
         return reply(503, { error: 'off', detail: 'нейроголос недоступен' }, origin);
       }
 
-      if (body.mode === 'chat' || body.mode === 'sub') {
+      if (body.mode === 'chat' || body.mode === 'sub' || body.mode === 'usage' || body.mode === 'usage-reset') {
         // лимит как у chatgpt: скользящее окно 12 часов. каждое сообщение занимает слот и освобождает его через 12 часов после отправки.
         // free 12, pro 40, max 120, ultra 300 сообщений в окне. месяц или год влияют на цену и срок подписки, не на лимит
         const PLANS = { pro: 40, max: 120, ultra: 300 };
         const FREE_DAY = Number(env.CHAT_LIMIT || 12);
-        const WIN_MS = 43200000;
+        const WIN_MS = 21600000;   // сессия: 6 часов
         const device = String(body.device || '');
         if (env.KV && !/^[A-Za-z0-9-]{16,64}$/.test(device)) return reply(400, { error: 'device' }, origin);
         const rstAt = await rstMs(env), day = dayKey(env) + rstTag(rstAt);
@@ -926,15 +932,37 @@ export default {
         } else if (env.KV) {
           usedKey = user ? 'rw:u' + user.id : 'rw:d:' + device;
         }
-        // метки времени сообщений за последние 12 часов
+        // личный сброс (раз в 2 недели) и недельный счётчик
+        const idk = usedKey ? usedKey.slice(3) : '';
+        const urst = env.KV && idk ? num(await env.KV.get('urst:' + idk)) : 0;
+        // метки времени сообщений за последние 6 часов
         let stamps = [];
         if (usedKey) { try { stamps = JSON.parse(await env.KV.get(usedKey) || '[]'); } catch (e1) { stamps = []; } }
         const nowMs = Date.now();
-        stamps = (Array.isArray(stamps) ? stamps : []).filter((t) => t > Math.max(nowMs - WIN_MS, rstAt)).sort((a, b) => a - b);
+        stamps = (Array.isArray(stamps) ? stamps : []).filter((t) => t > Math.max(nowMs - WIN_MS, rstAt, urst)).sort((a, b) => a - b);
         const used = stamps.length;
         // reset: когда освободится ближайший слот, full: когда лимит восстановится полностью
         const slotAt = (arr, lim) => (arr.length >= lim ? arr[arr.length - lim] + WIN_MS : 0);
         const fullAt = (arr) => (arr.length ? arr[arr.length - 1] + WIN_MS : 0);
+        const wk = weekOf(env, nowMs), wlimit = limit * WEEK_MULT, wkey = 'wk:' + idk + ':' + wk.idx;
+        let wrec = { chat: 0, cowork: 0, other: 0, t: 0 };
+        if (env.KV && idk) { try { wrec = Object.assign(wrec, JSON.parse(await env.KV.get(wkey) || 'null') || {}); } catch (e2) { /* нет записи */ } if (wrec.t < Math.max(urst, rstAt)) wrec = { chat: 0, cowork: 0, other: 0, t: 0 }; }
+        const wused = () => Math.round((wrec.chat + wrec.cowork + wrec.other) * 10) / 10;
+        const cr = creditOf(env, nowMs), crKey = 'rcu:' + idk + ':' + cr.idx;
+        const usageOut = async () => ({
+          plan: sub ? sub.plan : 'free', limit: limit, used: stamps.length, left: Math.max(0, limit - stamps.length), reset: slotAt(stamps, limit), full: fullAt(stamps),
+          week: { limit: wlimit, used: wused(), reset: wk.end, prod: { chat: wrec.chat, cowork: wrec.cowork, other: wrec.other } },
+          credit: { available: !(env.KV && idk && (await env.KV.get(crKey))), until: cr.until }
+        });
+        if (body.mode === 'usage') { if (!env.KV || !idk) return reply(503, { error: 'no kv' }, origin); return reply(200, await usageOut(), origin); }
+        if (body.mode === 'usage-reset') {
+          if (!env.KV || !idk) return reply(503, { error: 'no kv' }, origin);
+          if (await env.KV.get(crKey)) return reply(409, { error: 'used', detail: 'сброс уже использован' }, origin);
+          await env.KV.put(crKey, '1', { expirationTtl: 15 * 86400 });
+          await env.KV.put('urst:' + idk, String(nowMs), { expirationTtl: 21 * 86400 });
+          stamps = []; wrec = { chat: 0, cowork: 0, other: 0, t: 0 };
+          return reply(200, await usageOut(), origin);
+        }
         if (body.mode === 'sub') {
           if (!sub) return reply(403, { error: 'code' }, origin);
           return reply(200, { plan: sub.plan, period: sub.period, exp: sub.exp, left: Math.max(0, limit - used), limit: limit, reset: slotAt(stamps, limit), full: fullAt(stamps) }, origin);
@@ -961,6 +989,7 @@ export default {
         const cost = vision ? 1 : tier.cost;
         let gk = null, g = 0;
         if (env.KV) {
+          if (wused() + cost > wlimit) return reply(429, { error: 'limit', kind: 'week', plan: sub ? sub.plan : 'free', need: cost, left: 0, weekReset: wk.end, reset: wk.end, full: wk.end }, origin);
           if (used + cost > limit) return reply(429, { error: 'limit', plan: sub ? sub.plan : 'free', need: cost, left: Math.max(0, limit - used), reset: slotAt(stamps, limit), full: fullAt(stamps) }, origin);
           gk = 'g:' + day;
           g = num(await env.KV.get(gk));
@@ -984,6 +1013,9 @@ export default {
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
         const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, effort: tier.effort, maxTokens: tier.tokens });
         const used2 = cost;
+        const prodId = vision ? 'other' : (body.prod === 'cowork' ? 'cowork' : 'chat');
+        wrec[prodId] = (wrec[prodId] || 0) + cost; wrec.t = nowMs;
+        if (env.KV && idk) await env.KV.put(wkey, JSON.stringify(wrec), { expirationTtl: 9 * 86400 });
         if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(Array(cost).fill(nowMs)).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {
           answer: answer, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, model: tierId, cost: cost, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(Array(cost).fill(nowMs)), limit), full: nowMs + WIN_MS,
