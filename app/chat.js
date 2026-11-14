@@ -3014,13 +3014,6 @@
       layer.append(d);
     }
     document.body.prepend(layer);
-    var lastRip = 0;
-    document.addEventListener('pointerdown', function (e) {
-      if (!e.target.closest || !e.target.closest('button, .chip, .btn, .tchip, .sw, [role="button"]')) return;
-      var t = Date.now(); if (t - lastRip < 120) return; lastRip = t;
-      var r = h('i', { class: 'ripdot' }); r.style.left = e.clientX + 'px'; r.style.top = e.clientY + 'px';
-      document.body.append(r); setTimeout(function () { r.remove(); }, 700);
-    }, { passive: true });
   })();
 
   var splash = $('#splash');

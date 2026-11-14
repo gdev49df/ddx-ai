@@ -1414,3 +1414,4 @@ html.kbopen body .app .composer { padding-bottom: 8px; }
 html body .app .composer, html.standalone body .app .composer, html.standalone body.typing .app .composer, html:not(.standalone) body .app .composer { padding-bottom: 4px; }
 html.kbopen body .app .composer { padding-bottom: 6px; }
 @media (min-width: 900px) { html body .app .composer, html.standalone body .app .composer { padding-bottom: 24px; } }
+.ripdot { display: none !important; }
