@@ -75,10 +75,51 @@ const THINK_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
 const MISTRAL_PROMPT = 'Режим «Mistral 2.9»: отвечай как внимательный эксперт. Прежде чем ответить, про себя разбери вопрос по шагам, проверь вычисления и логику, учти неочевидные детали и частые ошибки. '
   + 'Давай точный, продуманный и структурированный ответ: сначала главное, затем обоснование. В сложных задачах показывай ключевые шаги решения. '
   + 'Если данных не хватает, задай один уточняющий вопрос или назови свои допущения. Не выдумывай факты и честно отмечай, в чём не уверен.';
+const ORION_PROMPT = 'Режим «Orion 3.0»: ты самая сильная модель приложения. Отвечай максимально глубоко, точно и полно. Сложные задачи решай по шагам с проверкой, код пиши структурированно, с пояснением архитектуры и граничных случаев. Если не уверен, так и скажи.';
+// kie: модель на kie.ai (openai-совместимый chat/completions, путь /<kie>/v1/chat/completions), пробуется первой, если задан секрет KIE_API_KEY; иначе groq
+// img: модель генерации фото на kie.ai (null = фото не создаёт), imgCost: цена фото в сообщениях лимита
 const TIERS = {
-  liama:   { models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], effort: 'low', cost: 1, tokens: 1500, env: 'MODEL_LIAMA', prompt: '' },
-  mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 3000, env: 'MODEL_MISTRAL', prompt: MISTRAL_PROMPT }
+  liama:   { models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'], effort: 'low', cost: 1, tokens: 1500, env: 'MODEL_LIAMA', prompt: '', kie: 'MODEL_KIE_LIAMA', kieDef: '', img: null, imgCost: 0 },
+  mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 3000, env: 'MODEL_MISTRAL', prompt: MISTRAL_PROMPT, kie: 'MODEL_KIE_MISTRAL', kieDef: '', img: 'nano-banana-2', imgCost: 3 },
+  orion:   { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'high', cost: 4, tokens: 4500, env: 'MODEL_ORION', prompt: ORION_PROMPT, kie: 'MODEL_KIE_ORION', kieDef: 'gpt-5-2', img: 'nano-banana-pro', imgCost: 8 }
 };
+
+// текст через kie.ai (если задан секрет KIE_API_KEY и имя модели), возвращает '' если недоступно
+async function kieChat(env, model, system, messages, maxTokens) {
+  if (!env.KIE_API_KEY || !model) return '';
+  const r = await fetch('https://api.kie.ai/' + model + '/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.KIE_API_KEY },
+    body: JSON.stringify({ messages: [{ role: 'system', content: system }].concat(messages), max_tokens: maxTokens, stream: false })
+  });
+  if (!r.ok) return '';
+  const j = await r.json().catch(() => null);
+  if (!j || (j.code && j.code !== 200)) return '';
+  return String((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+}
+
+// фото через kie.ai: createTask, затем опрос recordInfo до готовности (до ~70 с), возвращает массив ссылок
+async function kieImage(env, model, prompt, aspect) {
+  if (!env.KIE_API_KEY) throw new Error('KIE_API_KEY не задан');
+  const h = { 'content-type': 'application/json', authorization: 'Bearer ' + env.KIE_API_KEY };
+  const r = await fetch('https://api.kie.ai/api/v1/jobs/createTask', { method: 'POST', headers: h, body: JSON.stringify({ model: model, input: { prompt: prompt, aspect_ratio: aspect || '1:1', resolution: '1K', output_format: 'png' } }) });
+  const j = await r.json().catch(() => ({}));
+  const id = j && j.data && j.data.taskId;
+  if (!r.ok || j.code !== 200 || !id) throw new Error('kie: ' + String((j && (j.msg || j.message)) || r.status).slice(0, 120));
+  for (let i = 0; i < 28; i++) {
+    await new Promise((ok) => setTimeout(ok, i < 3 ? 3000 : 2500));
+    const q = await fetch('https://api.kie.ai/api/v1/jobs/recordInfo?taskId=' + encodeURIComponent(id), { headers: h });
+    const d = ((await q.json().catch(() => ({}))) || {}).data || {};
+    if (d.state === 'success') {
+      let urls = [];
+      try { urls = (JSON.parse(d.resultJson || '{}').resultUrls) || []; } catch (e) { /* пусто */ }
+      if (urls.length) return urls;
+      throw new Error('kie: пустой результат');
+    }
+    if (d.state === 'fail') throw new Error('kie: ' + String(d.failMsg || 'не удалось создать фото').slice(0, 120));
+  }
+  throw new Error('kie: фото не успело создаться, попробуй ещё раз');
+}
 
 async function chatLlm(env, models, messages, extra, opts) {
   opts = opts || {};
@@ -986,7 +1027,9 @@ export default {
         let tierId = TIERS[String(body.model)] ? String(body.model) : 'liama';
         if (body.think && TIERS[tierId].cost < 2) tierId = 'mistral';
         const tier = TIERS[tierId];
-        const cost = vision ? 1 : tier.cost;
+        const wantImg = !!body.image && !vision && !!tier.img && !!env.KIE_API_KEY;
+        if (body.image && !tier.img) return reply(400, { error: 'noimage', detail: 'эта модель не создаёт фото' }, origin);
+        const cost = wantImg ? tier.imgCost : (vision ? 1 : tier.cost);
         let gk = null, g = 0;
         if (env.KV) {
           if (wused() + cost > wlimit) return reply(429, { error: 'limit', kind: 'week', plan: sub ? sub.plan : 'free', need: cost, left: 0, weekReset: wk.end, reset: wk.end, full: wk.end }, origin);
@@ -1007,18 +1050,31 @@ export default {
             sysExtra += 'Результаты поиска в интернете (используй их для актуальных фактов, ссылайся на номера вида [1], не выдумывай того, чего в них нет):\n' + found.map((x, i) => '[' + (i + 1) + '] ' + x.title + ' — ' + x.url + '\n' + x.text).join('\n\n');
           } else sysExtra += 'Поиск в интернете ничего не нашёл. Скажи об этом и ответь по своим знаниям, предупредив, что данные могут быть устаревшими.';
         }
+        if (body.noImg && !tier.img) sysExtra += (sysExtra ? '\n\n' : '') + 'Эта модель не создаёт фото и видео. Если просят фото или картинку, коротко скажи, что для этого нужно выбрать Mistral 2.9 или Orion 3.0 в выборе модели, и предложи подробное текстовое описание картинки.';
         if (tier.prompt && !vision) sysExtra += (sysExtra ? '\n\n' : '') + tier.prompt;
         const ctx = String(body.context || '').slice(0, 9000);
         if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
-        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, effort: tier.effort, maxTokens: tier.tokens });
+        let answer = '', images = [];
+        if (body.image && !wantImg && !vision) throw new Error('генерация фото не настроена (нет KIE_API_KEY)');
+        if (wantImg) {
+          images = await kieImage(env, tier.img, String(msgs[msgs.length - 1].content).slice(0, 1800), /^(1:1|16:9|9:16|4:3|3:4)$/.test(String(body.aspect)) ? String(body.aspect) : '1:1');
+          answer = 'Готово, вот фото по твоему описанию.';
+        } else {
+          const kiem = !vision && (env[tier.kie] || tier.kieDef);
+          if (kiem) {
+            const sys0 = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (body.instructions ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + String(body.instructions).slice(0, 4000) : '') + (sysExtra ? '\n\n' + sysExtra : '');
+            try { answer = await kieChat(env, kiem, sys0, out, tier.tokens); } catch (e) { answer = ''; }
+          }
+          if (!answer) answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, effort: tier.effort, maxTokens: tier.tokens });
+        }
         const used2 = cost;
-        const prodId = vision ? 'other' : (body.prod === 'cowork' ? 'cowork' : 'chat');
+        const prodId = (vision || wantImg) ? 'other' : (body.prod === 'cowork' ? 'cowork' : 'chat');
         wrec[prodId] = (wrec[prodId] || 0) + cost; wrec.t = nowMs;
         if (env.KV && idk) await env.KV.put(wkey, JSON.stringify(wrec), { expirationTtl: 9 * 86400 });
         if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(Array(cost).fill(nowMs)).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {
-          answer: answer, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, model: tierId, cost: cost, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(Array(cost).fill(nowMs)), limit), full: nowMs + WIN_MS,
+          answer: answer, images: images, vision: vision, sources: sources, searched: !!body.search && !vision, thought: think, model: tierId, cost: cost, left: env.KV ? Math.max(0, limit - used - used2) : undefined, limit: env.KV ? limit : undefined, reset: slotAt(stamps.concat(Array(cost).fill(nowMs)), limit), full: nowMs + WIN_MS,
           plan: sub ? sub.plan : 'free', period: sub ? sub.period : 'day'
         }, origin);
       }

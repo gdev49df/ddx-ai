@@ -124,7 +124,7 @@
 
   function cleanMsgs(list) {
     return (Array.isArray(list) ? list : []).filter(function (m) { return m && (m.role === 'user' || m.role === 'assistant'); })
-      .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [],
+      .map(function (m) { return { id: uid(), at: +m.at || 0, fb: m.fb === 'up' || m.fb === 'down' ? m.fb : '', role: m.role, text: String(m.text != null ? m.text : (m.content || '')), src: Array.isArray(m.src) ? m.src.filter(function (s) { return s && /^https?:\/\//.test(s.u); }).slice(0, 6).map(function (s) { return { t: String(s.t || s.u).slice(0, 120), u: String(s.u) }; }) : [], gen: Array.isArray(m.gen) ? m.gen.filter(function (u) { return /^https:\/\//.test(u); }).slice(0, 4) : [], thumbs: Array.isArray(m.thumbs) ? m.thumbs : [], files: Array.isArray(m.files) ? m.files.filter(function (f) { return f && f.name; }).map(function (f) { return { name: String(f.name), text: String(f.text || '') }; }) : [],
         alts: Array.isArray(m.alts) ? m.alts.slice(0, 2).map(function (a) { return { text: String((a && a.text) || ''), src: Array.isArray(a && a.src) ? a.src : [], at: +(a && a.at) || 0 }; }) : null, vi: +m.vi === 1 ? 1 : 0,
         next: Array.isArray(m.next) ? m.next.slice(0, 3).map(function (x) { return String(x).slice(0, 80); }) : [] }; });
   }
@@ -159,7 +159,7 @@
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
         return { id: c.id, title: c.title, pinned: c.pinned, unread: c.unread ? 1 : 0, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
-          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
+          msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], gen: m.gen || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
       })
     });
   }
@@ -493,6 +493,8 @@
   }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pvEl && !palEl) closePreview(); });
 
+  var IMG_RE = /(нарису[йю]|сгенерир\w*|созда[йт]\w*|сделай|generate|draw|create)\s+(мне\s+|пожалуйста\s+)?(\S+\s+){0,3}?(фото\w*|картинк\w*|изображени\w*|рисун\w*|арт|иллюстраци\w*|image|picture|photo)/i;
+  function lastMsgHasPhoto(c) { var l = c.msgs[c.msgs.length - 1]; return !!(l && l.thumbs && l.thumbs.length); }
   function msgEl(m, fresh) {
     var el;
     if (m.role === 'user') {
@@ -510,6 +512,7 @@
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
       if (m.mk && m.mk.length) el.append(fileCards(m.mk));
+      if (m.gen && m.gen.length) { var gg = h('div', { class: 'pics gen' + (m.gen.length === 1 ? ' one' : '') }); m.gen.forEach(function (u) { gg.append(h('img', { src: u, alt: 'созданное фото', loading: 'lazy', onclick: function () { viewPhoto(u); } })); }); el.append(gg); }
       if (m.src && m.src.length) el.append(h('div', { class: 'srcs' }, h('span', { class: 'srcs-t', text: 'Источники' }), m.src.map(function (s, i) {
         var host = ''; try { host = new URL(s.u).hostname.replace(/^www\./, ''); } catch (eu) { host = s.u; }
         return h('a', { class: 'src', href: s.u, target: '_blank', rel: 'noopener noreferrer', title: s.t }, h('b', { text: String(i + 1), raw: 1 }), h('span', { text: host, raw: 1 }));
@@ -3137,7 +3140,7 @@
     web.addEventListener('click', function () { S.settings.web = !S.settings.web; save(); sync(); toast(S.settings.web ? 'Поиск в интернете включён' : 'Поиск выключен'); });
     thk.addEventListener('click', function () { thinkOn = !thinkOn; sync(); if (thinkOn) toast('Подумаю подольше: ответ будет точнее и займёт 2 сообщения из лимита'); });
     // выбор модели
-    var MODELS = [['liama', 'Liama 2.7', 'Быстрые текстовые ответы · 1 сообщение'], ['mistral', 'Mistral 2.9', 'Умнее: думает по шагам и проверяет ответ · 2 сообщения']];
+    var MODELS = [['liama', 'Liama 2.7', 'Быстрые текстовые ответы · 1 сообщение'], ['mistral', 'Mistral 2.9', 'Умнее: думает по шагам и проверяет ответ · 2 сообщения · фото: 3'], ['orion', 'Orion 3.0', 'Самая сильная: лучший текст и фото высшего качества · 4 сообщения · фото: 8']];
     var curM = function () { return MODELS.filter(function (m) { return m[0] === S.settings.model; })[0] || MODELS[0]; };
     var mlab = h('span', { text: curM()[1], raw: 1 }), mb = h('button', { class: 'tchip model', type: 'button', 'aria-haspopup': 'menu' }, mlab, icon('down')), mpop = null;
     var applyModel = function () {
@@ -3382,7 +3385,7 @@
     stopped = false;
     var c = curChat();
     if (!c || !c.msgs.length || c.msgs[c.msgs.length - 1].role !== 'user') return;
-    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn || /^mistral$/.test(S.settings.model || ''); setThinking(true);
+    busy = true; busyChat = c.id; syncSend(); clearError(); showSugg(); lastReqSearch = !!S.settings.web; lastReqThink = !!thinkOn || /^(mistral|orion)$/.test(S.settings.model || ''); setThinking(true);
     var wantTitle = c.msgs.length === 1 && S.settings.autoTitle !== false, memOn = S.settings.memOn !== false;
     var p = buildPayload(c), instr = buildInstructions(c, (memOn ? '\nЕсли пользователь в последнем сообщении назвал о себе новый устойчивый факт (имя, город, работа, учёба, увлечения, предпочтения), добавь в самый конец ответа отдельной строкой [[memory: короткий факт, например: живёт в Астане]]. ' + (S.settings.memSens ? 'Деликатные темы (здоровье, вера) сохранять можно, номера документов и карт никогда.' : 'Здоровье, деньги, политику, религию и документы не сохраняй.') + ' Нет нового факта: ничего не добавляй.' : '') + (wantTitle ? '\nВ самом конце ответа, с новой строки, добавь служебную метку [[title: название]]: короткое название этого чата из 2-4 слов по смыслу (например: Приветствие, План тренировок, Рецепт борща), без кавычек и точки.' : ''));
     var here = function () { return S.cur === c.id; };
@@ -3393,6 +3396,10 @@
       reqCtl = ctl;
       var body = { mode: 'chat', messages: p.list, device: device, model: S.settings.model || 'liama' };
       if (S.settings.web) body.search = true;
+      var imgQ = ''; for (var iq = c.msgs.length - 1; iq >= 0; iq--) { if (c.msgs[iq].role === 'user') { imgQ = c.msgs[iq].text || ''; break; } }
+      if (IMG_RE.test(imgQ) && !(lastMsgHasPhoto(c))) {
+        if (!/^(mistral|orion)$/.test(body.model)) { body.noImg = 1; } else { body.image = true; var ar = imgQ.match(/\b(16:9|9:16|4:3|3:4|1:1)\b/); if (ar) body.aspect = ar[1]; }
+      }
       if (thinkOn) { body.think = true; thinkOn = false; if (window.syncTools) window.syncTools(); }
       var lastQ = ''; for (var qi = c.msgs.length - 1; qi >= 0; qi--) { if (c.msgs[qi].role === 'user') { lastQ = c.msgs[qi].text; break; } }
       var pctx = projectContext(c, lastQ); if (pctx) body.context = pctx;
@@ -3428,6 +3435,7 @@
         if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
         var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [], next: nxt };
         if (mkFiles.length) m.mk = mkFiles;
+        if (Array.isArray(x.j.images) && x.j.images.length) m.gen = x.j.images.filter(function (u) { return /^https:\/\//.test(u); }).slice(0, 4);
         if (Array.isArray(x.j.sources) && x.j.sources.length) m.src = x.j.sources.filter(function (s) { return s && /^https?:\/\//.test(s.url); }).slice(0, 6).map(function (s) { return { t: String(s.title || s.url).slice(0, 120), u: String(s.url) }; });
         else if (x.j.searched) toast('В интернете ничего не нашлось, отвечаю по своим знаниям');
         if (pendingAlt && pendingAlt.chat === c.id) {

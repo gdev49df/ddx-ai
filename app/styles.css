@@ -1519,3 +1519,6 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .ucredit { margin: 6px 0 4px; padding: 14px 16px; border-radius: 16px; background: rgb(var(--w) / .05); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .ucredit b { font-size: 15px; }
 .ucredit .cap { margin: 0 0 6px; }
+.msg.ai .pics.gen { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 4px; }
+.msg.ai .pics.gen.one { grid-template-columns: 1fr; max-width: 420px; }
+.msg.ai .pics.gen img { width: 100%; display: block; border-radius: 14px; cursor: zoom-in; background: var(--soft, #1b1b1b); }
