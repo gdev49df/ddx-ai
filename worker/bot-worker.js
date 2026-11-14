@@ -6,7 +6,7 @@
 // Это привяжет вебхук, команды, кнопку меню и описание бота.
 
 const APP = 'https://gdev49df.github.io/ddx-ai/app/';
-const VIDEO = 'https://gdev49df.github.io/ddx-ai/assets/start2.mp4';
+const PHOTO = 'https://gdev49df.github.io/ddx-ai/assets/start.jpg';
 const SUPPORT = 'https://t.me/ddwwks';
 
 const WELCOME =
@@ -40,9 +40,9 @@ async function tg(env, method, body) {
 }
 
 async function welcome(env, chatId) {
-  // подпись к видео ограничена 1024 символами; если вдруг длиннее, шлём видео и текст отдельно
+  // подпись к фото ограничена 1024 символами; если вдруг длиннее, шлём только текст
   if (WELCOME.length <= 1024) {
-    const r = await tg(env, 'sendAnimation', { chat_id: chatId, animation: VIDEO, caption: WELCOME, reply_markup: KEYBOARD });
+    const r = await tg(env, 'sendPhoto', { chat_id: chatId, photo: PHOTO, caption: WELCOME, reply_markup: KEYBOARD });
     if (r.ok) return;
   }
   await tg(env, 'sendMessage', { chat_id: chatId, text: WELCOME, reply_markup: KEYBOARD, disable_web_page_preview: true });

@@ -125,4 +125,4 @@ plan: pro / max / ultra, period: month / year, exp: когда закончит�
 настоящую модель можно сменить переменной `MODEL_LIAMA` или `MODEL_MISTRAL` (через запятую, по порядку попыток).
 
 ## Telegram-бот (сообщение на /start)
-`worker/bot-worker.js` отдельный воркер. Создай воркер, вставь код, добавь секреты `BOT_TOKEN` (от @BotFather) и `WEBHOOK_SECRET` (любая случайная строка из латиницы и цифр), задеплой и один раз открой `https://имя-воркера.workers.dev/setup?s=ТВОЙ_WEBHOOK_SECRET`. Видео для приветствия лежит в `assets/start2.mp4`.
+`worker/bot-worker.js` отдельный воркер. Создай воркер, вставь код, добавь секреты `BOT_TOKEN` (от @BotFather) и `WEBHOOK_SECRET` (любая случайная строка из латиницы и цифр), задеплой и один раз открой `https://имя-воркера.workers.dev/setup?s=ТВОЙ_WEBHOOK_SECRET`. Картинка для приветствия лежит в `assets/start.jpg`.
