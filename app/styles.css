@@ -1311,7 +1311,7 @@ body.lock { position: static; }
 /* поле ввода: в потоке, по ширине ленты. над клавиатурой оно оказывается само, когда оболочка уменьшается */
 body .app .composer, body.typing .app .composer { position: relative; left: auto; right: auto; bottom: auto; flex: none; width: 100%; max-width: 680px; margin: 0 auto; z-index: 5;
   padding: 4px 10px calc(env(safe-area-inset-bottom) + 8px); transform: none !important; }
-html.kbopen body .app .composer { padding-bottom: 8px; }
+html.kbopen body .app .composer { padding-bottom: 6px; }
 .app .composer .sugg { margin: 0 0 8px; padding: 0 2px 2px; }
 
 /* карточка ввода как в Claude: сверху текст, снизу ряд управления */
@@ -1364,7 +1364,7 @@ html.kbopen { --tabh: 0px; }
 .tab.on { color: var(--ink); background: rgb(var(--w) / .07); }
 html.kbopen .tabs { display: none; }
 /* поле ввода теперь стоит над вкладками: отступ от низа берут на себя они */
-body .app .composer, body.typing .app .composer { padding-bottom: 4px; }
+body .app .composer, body.typing .app .composer { padding-bottom: 6px; }
 html.kbopen body .app .composer { padding-bottom: 8px; }
 .downbtn { bottom: calc(var(--cph, 72px) + var(--tabh) + 10px); }
 .toast { bottom: calc(var(--cph, 72px) + var(--tabh) + 12px); }
@@ -1411,7 +1411,7 @@ html.kbopen body .app .composer { padding-bottom: 8px; }
 .legal-cap { text-align: center; margin-top: 14px; }
 
 /* поле ввода как можно ниже: в установленном приложении нижняя полоска iPhone уже вне области страницы, отступ под неё не нужен */
-html body .app .composer, html.standalone body .app .composer, html.standalone body.typing .app .composer, html:not(.standalone) body .app .composer { padding-bottom: 4px; }
+html body .app .composer, html.standalone body .app .composer, html.standalone body.typing .app .composer, html:not(.standalone) body .app .composer { padding-bottom: 6px; }
 html.kbopen body .app .composer { padding-bottom: 6px; }
 @media (min-width: 900px) { html body .app .composer, html.standalone body .app .composer { padding-bottom: 24px; } }
 .ripdot { display: none !important; }
@@ -1432,3 +1432,7 @@ html.tg body .app .bar { padding-top: calc(max(env(safe-area-inset-top, 0px), va
 }
 
 .card.muted { opacity: .6; } .card.muted #t::placeholder { color: #ff8a80; opacity: 1; }
+
+/* строка чата не дёргается при открытии/закрытии клавиатуры и смене чата: отступы меняются плавно */
+html body .app .composer { transition: padding-bottom .24s cubic-bezier(.2, .8, .2, 1); }
+html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding-bottom: 8px !important; }

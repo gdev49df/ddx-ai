@@ -3101,7 +3101,8 @@
   var vvRaf = 0, vvTick = function () { if (vvRaf) return; vvRaf = requestAnimationFrame(function () { vvRaf = 0; vvSync(); }); };
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', vvTick); window.visualViewport.addEventListener('scroll', vvTick); }
   window.addEventListener('resize', vvTick); window.addEventListener('scroll', vvTick, { passive: true });
-  ['pageshow', 'orientationchange', 'focusout'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(vvSync, 60); setTimeout(vvSync, 400); }); });
+  ['pageshow', 'orientationchange'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(vvSync, 60); setTimeout(vvSync, 400); }); });
+  window.addEventListener('focusout', function () { setTimeout(vvSync, 120); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { vvSync(); setTimeout(vvSync, 300); } });
   vvSync();
   ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(vvSync, 50); setTimeout(vvSync, 350); setTimeout(function () { toBottom(true); }, 320); });
