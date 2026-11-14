@@ -1425,35 +1425,6 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 /* шапка не должна уходить под плавающую кнопку «Закрыть» */
 html.tg body .app .bar { padding-top: calc(max(env(safe-area-inset-top, 0px), var(--tgt, 0px)) + 8px) !important; }
 
-/* мини-игры в чате */
-.msg.ai.game { padding: 0; }
-.gm { width: min(100%, 340px); background: var(--card); border: 1px solid var(--line-top, rgba(255,255,255,.08)); border-radius: 22px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.gm-h { font-size: 15px; letter-spacing: -.01em; margin: 2px 4px 10px; }
-.gm-st { font-size: 14px; opacity: .78; margin: 0 4px 10px; min-height: 20px; }
-.gm-row, .gm-pick { display: flex; gap: 8px; margin-top: 12px; }
-.gm-pick { margin-top: 0; }
-.gm-b, .gm-g { flex: 1; font: inherit; font-size: 14px; color: inherit; background: rgb(var(--w, 255 255 255) / .08); border: 0; border-radius: 14px; padding: 11px 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .15s var(--ease, ease), background .15s; }
-.gm-b:active, .gm-g:active { transform: scale(.96); }
-.gm-b.ghost { background: transparent; opacity: .65; }
-.gm-g { white-space: pre-line; line-height: 1.5; padding: 16px 8px; font-size: 14px; }
-.gm-ttt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.gm-c { aspect-ratio: 1; border: 0; border-radius: 16px; background: rgb(var(--w, 255 255 255) / .07); color: inherit; font: inherit; font-size: 34px; line-height: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .15s var(--ease, ease), background .2s; }
-.gm-c:active:not(.x):not(.o) { transform: scale(.93); }
-.gm-c.x { color: #fff; } .gm-c.o { opacity: .8; }
-.gm-c.win { background: rgba(120, 220, 150, .25); }
-.gm-ck { display: grid; grid-template-columns: repeat(8, 1fr); border-radius: 12px; overflow: hidden; aspect-ratio: 1; touch-action: manipulation; }
-.gm-q { position: relative; border: 0; padding: 0; margin: 0; background: rgb(var(--w, 255 255 255) / .1); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-.gm-q.dk { background: rgba(0, 0, 0, .55); }
-.gm-q.lm { box-shadow: inset 0 0 0 100px rgba(255, 255, 255, .07); }
-.gm-q.tg::after { content: ""; width: 34%; height: 34%; border-radius: 50%; background: rgba(120, 220, 150, .7); }
-.gm-p { width: 78%; height: 78%; border-radius: 50%; display: block; box-shadow: 0 2px 5px rgba(0,0,0,.5), inset 0 -3px 5px rgba(0,0,0,.25); position: relative; transition: transform .15s; }
-.gm-p.wh { background: radial-gradient(circle at 35% 30%, #fff, #c9c9cf); }
-.gm-p.bl { background: radial-gradient(circle at 35% 30%, #5a5a63, #1c1c21); box-shadow: 0 2px 5px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.18); }
-.gm-p.kg::after { content: "♛"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 62%; color: #b8860b; }
-.gm-p.bl.kg::after { color: #e8c35a; }
-.gm-p.sel { transform: scale(1.12); box-shadow: 0 0 0 3px rgba(120,220,150,.85), 0 4px 10px rgba(0,0,0,.5); }
-.gm-p.must { box-shadow: 0 0 0 2px rgba(255,190,90,.9), 0 2px 5px rgba(0,0,0,.5); }
-
 /* на широком экране окна по центру: скругляем все углы (в т.ч. нижние) */
 @media (min-width: 640px) {
   html body .sheet-panel, html body .sheet-panel.swin { border-radius: 28px; }
