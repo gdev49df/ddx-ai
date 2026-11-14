@@ -123,3 +123,6 @@ plan: pro / max / ultra, period: month / year, exp: когда закончит�
 | Mistral 2.9 | gpt-oss-120b | medium | 2 сообщения | отдельная инструкция `MISTRAL_PROMPT`: разбирать вопрос по шагам и проверять ответ |
 
 настоящую модель можно сменить переменной `MODEL_LIAMA` или `MODEL_MISTRAL` (через запятую, по порядку попыток).
+
+## Telegram-бот (сообщение на /start)
+`worker/bot-worker.js` отдельный воркер. Создай воркер, вставь код, добавь секреты `BOT_TOKEN` (от @BotFather) и `WEBHOOK_SECRET` (любая случайная строка из латиницы и цифр), задеплой и один раз открой `https://имя-воркера.workers.dev/setup?s=ТВОЙ_WEBHOOK_SECRET`. Видео для приветствия лежит в `assets/start.mp4`.
