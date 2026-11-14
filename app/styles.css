@@ -1442,3 +1442,7 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 @media (min-width: 900px) { .cfoot { display: block; } }
 .popmenu .pi .pv svg.i { width: 15px; height: 15px; opacity: .55; }
 .popmenu .pi .pv { margin-left: auto; padding-left: 16px; }
+
+/* кнопка «вниз» по центру чата */
+.downbtn { right: auto; left: 50%; margin-left: -22px; }
+@media (min-width: 900px) { .downbtn { right: auto; left: calc(50% + 150px); } }
