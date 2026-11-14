@@ -779,6 +779,29 @@ export default {
         return reply(200, { text: String(sj.text || '').trim().slice(0, 2000) }, origin);
       }
 
+      if (body.mode === 'tts') {
+        if (!env.ELEVEN_KEY) return reply(503, { error: 'off', detail: 'в воркере нет секрета ELEVEN_KEY' }, origin);
+        const ttext = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+        if (!ttext) return reply(400, { error: 'text' }, origin);
+        const tdev = String(body.device || '');
+        if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(tdev)) return reply(400, { error: 'device' }, origin);
+        if (env.KV) {
+          // защита бесплатных кредитов: общий потолок на месяц и лимит символов на человека в день
+          const mk = 'tts:m:' + new Date().toISOString().slice(0, 7), dk = 'tts:d:' + (user ? 'u' + user.id : tdev) + ':' + dayKey(env);
+          const used = num(await env.KV.get(mk)), mine = num(await env.KV.get(dk));
+          if (used + ttext.length > Number(env.TTS_MONTH_CAP || 8000)) return reply(429, { error: 'cap', detail: 'нейроголос на этот месяц исчерпан' }, origin);
+          if (mine + ttext.length > Number(env.TTS_DAY_CHARS || 2500)) return reply(429, { error: 'limit', detail: 'на сегодня нейроголос исчерпан' }, origin);
+          await env.KV.put(mk, String(used + ttext.length), { expirationTtl: 3456000 });
+          await env.KV.put(dk, String(mine + ttext.length), { expirationTtl: 172800 });
+        }
+        const tr = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(env.ELEVEN_VOICE || 'EXAVITQu4vr4xnSDxMaL') + '?output_format=mp3_44100_64', {
+          method: 'POST', headers: { 'xi-api-key': env.ELEVEN_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+          body: JSON.stringify({ text: ttext, model_id: env.ELEVEN_MODEL || 'eleven_flash_v2_5' })
+        });
+        if (!tr.ok) { let dm = ''; try { dm = JSON.stringify((await tr.json()).detail || '').slice(0, 160); } catch (e) { /* тела нет */ } return reply(502, { error: 'upstream', detail: 'elevenlabs ' + tr.status + (dm ? ': ' + dm : '') }, origin); }
+        return new Response(tr.body, { status: 200, headers: Object.assign({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' }, cors(origin)) });
+      }
+
       if (body.mode === 'chat' || body.mode === 'sub') {
         // лимит как у chatgpt: скользящее окно 12 часов. каждое сообщение занимает слот и освобождает его через 12 часов после отправки.
         // free 12, pro 40, max 120, ultra 300 сообщений в окне. месяц или год влияют на цену и срок подписки, не на лимит
