@@ -2842,7 +2842,7 @@
   var DIR_SKIP = /^(node_modules|\.git|\.svn|dist|build|out|\.next|\.nuxt|__pycache__|venv|\.venv|env|\.idea|\.vscode|target|vendor|coverage|\.cache|\.gradle|Pods)$/i;
   var DIR_TEXT = /(\.(txt|md|markdown|csv|tsv|json|jsonc|log|xml|html|htm|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|java|kt|go|rs|c|h|cpp|hpp|cs|php|rb|swift|sql|sh|bat|ps1|yml|yaml|toml|ini|cfg|conf|tex|srt|vue|svelte|lua|dart|gradle|properties|gitignore|env\.example)|(^|\/)(dockerfile|makefile|readme|license))$/i;
   var DIR_DOC = /\.(docx|xlsx|pptx|pdf)$/i;
-  var dirH = null, dirFiles = [], dirAt = 0, dirBusy = null, dirCache = {}, dirNeedPerm = false;
+  var dirH = null, dirFiles = [], dirAt = 0, dirBusy = null, dirCache = {}, dirNeedPerm = false, dirErr = false;
   function idb(fn) {
     return new Promise(function (res, rej) {
       var o = indexedDB.open('ddx-dir', 1);
@@ -2878,7 +2878,8 @@
     if (dirBusy) return dirBusy;
     if (!force && Date.now() - dirAt < 30000) return Promise.resolve();
     var out = [];
-    dirBusy = dirWalk(dirH, '', 0, out).then(function () { dirFiles = out; dirAt = Date.now(); }).catch(function () {}).then(function () { dirBusy = null; showDirbar(); });
+    dirErr = false;
+    dirBusy = dirWalk(dirH, '', 0, out).then(function () { dirFiles = out; dirAt = Date.now(); }).catch(function () { dirErr = true; }).then(function () { dirBusy = null; showDirbar(); });
     return dirBusy;
   }
   function dirRead(f) {
@@ -2910,9 +2911,9 @@
     var bar = $('#dirbar'); if (!bar) return;
     if (!dirH) { bar.hidden = true; bar.replaceChildren(); measure(); return; }
     var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'отключить папку' }, icon('close')); x.addEventListener('click', function (e) { e.stopPropagation(); dirDisconnect(); });
-    var lab = dirNeedPerm ? 'папка «' + dirH.name + '»: нажми, чтобы разрешить' : 'папка «' + dirH.name + '»' + (dirFiles.length ? ' · ' + dirFiles.length + ' файлов' : dirBusy ? ' · читаю…' : '');
+    var lab = dirNeedPerm ? 'папка «' + dirH.name + '»: нажми, чтобы разрешить' : 'папка «' + dirH.name + '»' + (dirBusy ? ' · читаю…' : dirErr ? ' · не удалось прочитать' : dirFiles.length ? ' · ' + dirFiles.length + ' ' + (dirFiles.length % 10 === 1 && dirFiles.length % 100 !== 11 ? 'файл' : dirFiles.length % 10 >= 2 && dirFiles.length % 10 <= 4 && (dirFiles.length % 100 < 10 || dirFiles.length % 100 >= 20) ? 'файла' : 'файлов') : ' · нет подходящих файлов');
     bar.hidden = false; bar.replaceChildren(icon('folder'), h('span', { text: lab, raw: 1 }), x); measure();
-    bar.onclick = function () { if (!dirNeedPerm) return; dirH.requestPermission({ mode: 'read' }).then(function (p) { if (p === 'granted') { dirNeedPerm = false; dirIndex(true); } showDirbar(); }); };
+    bar.onclick = function () { if (!dirNeedPerm) { if (!dirBusy) { dirIndex(true); showDirbar(); } return; } dirH.requestPermission({ mode: 'read' }).then(function (p) { if (p === 'granted') { dirNeedPerm = false; dirIndex(true); } showDirbar(); }); };
   }
   // выдержки из файлов папки, которые подходят к вопросу: сначала по имени, потом по содержимому
   function folderContext(q) {

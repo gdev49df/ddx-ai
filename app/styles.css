@@ -1458,3 +1458,4 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .fc-btn.ghost { background: rgb(var(--w) / .08); color: var(--ink); font-weight: 500; }
 .fc-btn.warn { background: #e8a33a; color: #1a1205; }
 .fc-btn:disabled { opacity: .55; cursor: default; }
+#dirbar { cursor: pointer; }
