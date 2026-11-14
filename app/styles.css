@@ -1384,3 +1384,4 @@ html.kbopen .toast { bottom: calc(var(--kb, 0px) + var(--cph, 72px) + 16px); }
 .pempty .btn { margin-top: 8px; }
 .app.tab-p #more, .app.tab-p #newchat { display: none !important; }
 @media (min-width: 900px) { .tabs { display: none; } :root { --tabh: 0px; } .pview { max-width: var(--cw, 760px); } body .app .composer { padding-bottom: 24px; } }
+.app .bar::after, .app .bar::before { display: none; }
