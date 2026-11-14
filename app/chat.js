@@ -586,7 +586,7 @@
   if (window.speechSynthesis && window.speechSynthesis.addEventListener) window.speechSynthesis.addEventListener('voiceschanged', function () { voiceCache = {}; });
   function applyVoice(u, lg) { u.lang = lg; var v = pickVoice(lg); if (v) { u.voice = v; u.lang = v.lang || lg; } u.rate = 1; u.pitch = 1; }
   /* озвучка: сначала нейроголос через воркер (ElevenLabs), если он недоступен, голос устройства */
-  var netOff = 0, netAudio = null, netTok = 0;
+  var netOff = 0, netAudio = null, netTok = 0, voiceLimToast = 0;
   function stopSpeech() {
     netTok++; if (netAudio) { try { netAudio.pause(); } catch (e) { /* уже остановлен */ } netAudio = null; }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -605,8 +605,8 @@
   function netSay(t, lg, onEnd, onFail) {
     var myTok = ++netTok, parts = t.match(/[^.!?…]+[.!?…]*\s*/g) || [t], chunks = [], cur = '', started = false, i = 0, next = null;
     parts.forEach(function (p) { if ((cur + p).length > 260 && cur) { chunks.push(cur); cur = ''; } cur += p; }); if (cur) chunks.push(cur);
-    var fetchChunk = function (txt) {
-      return fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'tts', text: txt, lang: lg.slice(0, 2), device: device }) })
+    var fetchChunk = function (txt, first) {
+      return fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'tts', text: txt, lang: lg.slice(0, 2), device: device, code: subCode || undefined, first: first }) })
         .then(function (r) {
           if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { var e = new Error(j.error || r.status); e.st = r.status; throw e; });
           return r.blob();
@@ -621,7 +621,7 @@
     var step = function (blob) {
       if (myTok !== netTok) return;
       started = true;
-      var j = i + 1, pre = j < chunks.length ? fetchChunk(chunks[j]) : null;
+      var j = i + 1, pre = j < chunks.length ? fetchChunk(chunks[j], false) : null;
       play(blob, function (bad) {
         if (myTok !== netTok) return;
         i = j;
@@ -629,9 +629,10 @@
         pre.then(step, function () { if (myTok === netTok) onEnd(); });
       });
     };
-    fetchChunk(chunks[0]).then(step, function (e) {
+    fetchChunk(chunks[0], true).then(step, function (e) {
       if (myTok !== netTok) return;
-      if (e && (e.st === 503 || e.st === 501 || e.st === 429 || e.st === 400 || e.st === 404)) netOff = Date.now() + 10 * 60000;
+      if (e && e.st === 429) { netOff = Date.now() + 30 * 60000; if (!voiceLimToast || Date.now() - voiceLimToast > 600000) { voiceLimToast = Date.now(); limitToast('Лимит голосовых ответов на сегодня исчерпан, дальше голос устройства'); } }
+      else if (e && (e.st === 503 || e.st === 501 || e.st === 400 || e.st === 404)) netOff = Date.now() + 10 * 60000;
       if (!started) onFail(); else onEnd();
     });
   }
@@ -1698,10 +1699,10 @@
   /* ---------- тарифы ---------- */
   // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
   var LIMITS = {
-    free: { pfiles: 2, photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 15, skills: 2 },
-    pro: { pfiles: 5, photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 45, skills: 8 },
-    max: { pfiles: 10, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 },
-    ultra: { pfiles: 20, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 }
+    free: { voice: 5, pfiles: 2, photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 15, skills: 2 },
+    pro: { voice: 30, pfiles: 5, photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 45, skills: 8 },
+    max: { voice: 100, pfiles: 10, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 },
+    ultra: { voice: 300, pfiles: 20, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 }
   };
   function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
   function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
@@ -1719,6 +1720,7 @@
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {
     var L = LIMITS[id], big = function (n) { return n >= 1e9; }, rows = [
+      'Голосовой режим: ' + L.voice + ' ответов в день',
       'Фото: до ' + L.photos + ' в сообщении',
       'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
       big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
@@ -2112,6 +2114,15 @@
     };
     var lim2 = function (title, now, max) { var inf = big(max); var p = inf ? 0 : Math.round(now / max * 100); return row(title, inf ? now + ' · без ограничений' : now + ' из ' + max, p, inf ? '∞' : p + '%', !inf && p >= 80); };
     var pinned = S.chats.filter(function (x) { return x.pinned; }).length;
+    var vrow = row('Голосовые ответы за день', 'Нейроголос в голосовом режиме и в «озвучить»', 0, '— из ' + L.voice, false);
+    fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'tts', check: true, device: device, code: subCode || undefined }) })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (!j || typeof j.used !== 'number' || !vrow.isConnected) return;
+        var p = j.limit ? Math.round(j.used / j.limit * 100) : 0;
+        vrow.querySelector('.ubar i').style.width = Math.max(p > 0 ? 2 : 0, Math.min(100, p)) + '%';
+        vrow.querySelector('.ubar').classList.toggle('warn', p >= 80);
+        vrow.querySelector('.ur').textContent = j.used + ' из ' + j.limit;
+      }, function () { /* без связи цифры не показываем */ });
     var up = h('button', { class: 'btn solid block', type: 'button', text: sub ? 'Сменить тариф' : 'Улучшить тариф' }); up.addEventListener('click', function () { openPlans(); });
     openSheet([
       backLink(function () { if (wide()) closeSheet(); else openMenu(); }),
@@ -2121,6 +2132,7 @@
         row('Сообщения за 12 часов', reset + (total ? ' · осталось ' + lastLeft.left + ' из ' + total : ''), pct, total ? pct + '%' : '—', pct >= 80)),
       h('p', { class: 'glabel', text: 'Лимиты тарифа' }),
       h('div', { class: 'ugroup' },
+        vrow,
         lim2('Проекты', S.projects.length, L.projects),
         lim2('Закреплённые чаты', pinned, L.pins),
         lim2('Записи в памяти', ((S.settings.memory || []).length), L.memory),
