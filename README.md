@@ -18,6 +18,7 @@ DDX AI: чат (pwa) на воркере ddx-ai (groq), в том же стил�
 ## файлы
 
 - `app/`: сам чат (`index.html`, `styles.css`, `chat.js`, `theme.js`, `sw.js`, `manifest.json`, шрифты и иконки)
+- `ddx-expo/`: нативная версия на Expo (React Native), см. `ddx-expo/README.md`
 - `worker/chat-patch-1.js` и `worker/chat-patch-2.js`: две вставки в код воркера ddx-ai, добавляют режим `chat` с поддержкой фото
 
 ## важно: воркер должен знать режим chat
