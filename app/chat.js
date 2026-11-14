@@ -2878,6 +2878,7 @@
       reqCtl = ctl;
       var body = { mode: 'chat', messages: p.list, device: device, model: S.settings.model || 'liama' };
       if (S.settings.web) body.search = true;
+      if (S.settings.angry) body.angry = true;
       if (thinkOn) { body.think = true; thinkOn = false; if (window.syncTools) window.syncTools(); }
       var lastQ = ''; for (var qi = c.msgs.length - 1; qi >= 0; qi--) { if (c.msgs[qi].role === 'user') { lastQ = c.msgs[qi].text; break; } }
       var pctx = projectContext(c, lastQ); if (pctx) body.context = pctx;
