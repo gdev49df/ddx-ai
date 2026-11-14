@@ -1409,3 +1409,8 @@ html.kbopen body .app .composer { padding-bottom: 8px; }
 .foot.legal { margin-bottom: 4px; }
 .foot.legal a, .legal-cap a { color: inherit; text-decoration: underline; text-decoration-color: rgb(var(--w) / .35); text-underline-offset: 3px; }
 .legal-cap { text-align: center; margin-top: 14px; }
+
+/* поле ввода как можно ниже: в установленном приложении нижняя полоска iPhone уже вне области страницы, отступ под неё не нужен */
+html body .app .composer, html.standalone body .app .composer, html.standalone body.typing .app .composer, html:not(.standalone) body .app .composer { padding-bottom: 4px; }
+html.kbopen body .app .composer { padding-bottom: 6px; }
+@media (min-width: 900px) { html body .app .composer, html.standalone body .app .composer { padding-bottom: 24px; } }
