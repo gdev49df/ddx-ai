@@ -1389,3 +1389,10 @@ html.kbopen .toast { bottom: calc(var(--kb, 0px) + var(--cph, 72px) + 16px); }
 /* прежнее лого в шапке: «личный помощник» над крупным DDX AI (шрифт Unbounded), по центру */
 .app .bar h1.is-brand { font-size: 23px; letter-spacing: .02em; font-weight: 700; padding-top: 3px; }
 .app .bar .brand:has(h1.is-brand) .label { display: block; font-size: 10.5px; letter-spacing: .14em; opacity: .8; }
+
+/* нижние вкладки убраны: проекты открываются из боковой панели */
+.tabs { display: none !important; }
+:root, html.kbopen { --tabh: 0px; }
+body .app .composer, body.typing .app .composer { padding-bottom: calc(env(safe-area-inset-bottom) + 8px); }
+html.kbopen body .app .composer { padding-bottom: 8px; }
+@media (min-width: 900px) { body .app .composer { padding-bottom: 24px; } }
