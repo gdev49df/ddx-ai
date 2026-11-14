@@ -1415,3 +1415,7 @@ html body .app .composer, html.standalone body .app .composer, html.standalone b
 html.kbopen body .app .composer { padding-bottom: 6px; }
 @media (min-width: 900px) { html body .app .composer, html.standalone body .app .composer { padding-bottom: 24px; } }
 .ripdot { display: none !important; }
+
+/* Telegram Mini App: свой заголовок и жесты у Telegram, лишних подсказок про «на экран домой» нет */
+html.tg, html.tg body { overscroll-behavior: none; }
+html.tg .install-hint, html.tg #install { display: none !important; }
