@@ -6,7 +6,7 @@
 // Это привяжет вебхук, команды, кнопку меню и описание бота.
 
 const APP = 'https://gdev49df.github.io/ddx-ai/app/';
-const VIDEO = 'https://gdev49df.github.io/ddx-ai/assets/start.mp4';
+const VIDEO = 'https://gdev49df.github.io/ddx-ai/assets/start2.mp4';
 const SUPPORT = 'https://t.me/ddwwks';
 
 const WELCOME =
