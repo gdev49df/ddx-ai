@@ -146,7 +146,6 @@ export function SettingsSheet({ visible, onClose, openAuth, openPlans }: { visib
       <Field value={mem} onChangeText={setMem} placeholder="добавить в память" maxLength={200} onSubmitEditing={() => { if (addMemory(mem)) setMem(''); }} />
 
       <Btn kind="danger" label="удалить все чаты" onPress={() => Alert.alert('удалить все чаты?', 'это нельзя отменить', [{ text: 'отмена', style: 'cancel' }, { text: 'удалить', style: 'destructive', onPress: clearAll }])} />
-      <Text style={{ color: C.mute, textAlign: 'center', fontSize: 13, marginTop: 6 }}>DDX AI · создано @bauyrzhanov_12_</Text>
     </Sheet>
   );
 }
