@@ -1482,3 +1482,4 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .rsep { display: block; height: 1px; margin: 5px 6px; background: var(--line); }
 .udot { flex: none; width: 8px; height: 8px; margin-left: 2px; border-radius: 50%; background: var(--ink); }
 .srow:hover .udot, .srow-more.on ~ .udot { opacity: 0; }
+.sbody > p.cap { margin: 8px 0 0; padding: 0 12px; font-size: 14px; white-space: nowrap; }

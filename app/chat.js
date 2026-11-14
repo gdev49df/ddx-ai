@@ -1140,7 +1140,7 @@
         if (projs.length) add(section('proj', 'проекты', projs));
         var rest = S.chats.filter(function (c) { return !c.pinned && !c.project; }).sort(bySide);
         if (rest.length || (projs.length && S.chats.length)) add(section('rec', 'недавние', rest.map(function (c) { return srow(c, false); }), sortTool()));
-        else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'пока нет чатов. напиши первый вопрос.' }));
+        else if (!S.chats.length) body.append(h('p', { class: 'cap', text: 'Пока нет чатов' }));
       }
       var nm = (S.settings.name || '').trim();
       var prof = h('button', { class: 'sprof', type: 'button', 'aria-label': 'профиль' },
