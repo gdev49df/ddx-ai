@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   var inTg = /tgWebAppData|tgWebAppVersion|tgWebAppPlatform/.test(location.hash + location.search) || !!(window.TelegramWebviewProxy);
+  try { if (inTg) sessionStorage.setItem('ddx_tg', '1'); else if (sessionStorage.getItem('ddx_tg')) inTg = true; } catch (e) {}
   if (!inTg) return;
   document.documentElement.classList.add('tg');
   var s = document.createElement('script');
@@ -9,8 +10,15 @@
   s.onload = function () {
     var tg = window.Telegram && Telegram.WebApp;
     if (!tg) return;
+    function insets() {
+      var r = document.documentElement.style, a = tg.safeAreaInset || {}, c = tg.contentSafeAreaInset || {};
+      r.setProperty('--tgb', (a.bottom || 0) + (c.bottom || 0) + 'px');
+      r.setProperty('--tgt', (a.top || 0) + (c.top || 0) + 'px');
+    }
     try {
       tg.ready();
+      insets();
+      ['safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged', 'viewportChanged'].forEach(function (ev) { try { tg.onEvent(ev, insets); } catch (x) {} });
       tg.expand();
       if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();   // чтобы свайп по чату не закрывал приложение
       if (tg.setHeaderColor) tg.setHeaderColor('#08080a');
