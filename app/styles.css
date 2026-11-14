@@ -1436,3 +1436,9 @@ html.tg body .app .bar { padding-top: calc(max(env(safe-area-inset-top, 0px), va
 /* строка чата не дёргается при открытии/закрытии клавиатуры и смене чата: отступы меняются плавно */
 html body .app .composer { transition: padding-bottom .24s cubic-bezier(.2, .8, .2, 1); }
 html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding-bottom: 8px !important; }
+
+/* подпись под строкой чата (как в claude на компьютере) */
+.cfoot { display: none; text-align: center; font-size: 12px; color: var(--mute); padding: 8px 0 0; }
+@media (min-width: 900px) { .cfoot { display: block; } }
+.popmenu .pi .pv svg.i { width: 15px; height: 15px; opacity: .55; }
+.popmenu .pi .pv { margin-left: auto; padding-left: 16px; }

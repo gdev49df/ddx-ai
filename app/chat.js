@@ -2115,7 +2115,7 @@
     paneHost = null; openSheet([win], false); panel.classList.add('swin');
     show(swSec);
   }
-  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openMenu(); } });
+  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U') && sheet.hidden) { e.preventDefault(); $('#docfile').click(); return; } if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openMenu(); } });
 
   function openMenu() {
     if (wide()) { openSettingsWin(); return; }
@@ -2409,14 +2409,15 @@
   }
   function openPlus() {
     if (plusPop) { closePlus(); return; }
-    var item = function (label, ic, fn) { var b = h('button', { class: 'pi', type: 'button' }, icon(ic), h('span', { text: label })); b.addEventListener('click', function () { closePlus(); fn(); }); return b; };
-    plusPop = h('div', { class: 'popmenu up', role: 'menu' },
-      item('Фото', 'image', function () { $('#file').click(); }),
-      item('Файлы', 'file', function () { $('#docfile').click(); }),
-      item(dirH ? 'Сменить папку' : 'Подключить папку', 'folder', dirConnect),
-      item('Добавить в проект', 'folder', pickProjectForNew),
-      item('Skills', 'bolt', openSkills),
-      item('Память', 'brain', openMemory));
+    var item = function (label, ic, fn, val, sub) {
+      var b = h('button', { class: 'pi', type: 'button' }, icon(ic), h('span', { text: label }), val ? h('em', { class: 'pv', text: val, raw: 1 }) : sub ? h('em', { class: 'pv' }, icon('chev')) : document.createTextNode(''));
+      b.addEventListener('click', function () { closePlus(); fn(); }); return b;
+    };
+    var kb = wide();
+    var rows = [item('Загрузить файл', 'file', function () { $('#docfile').click(); }, kb ? 'Ctrl+U' : ''), item('Фото', 'image', function () { $('#file').click(); })];
+    if (DIR_OK) rows.push(item(dirH ? 'Сменить папку' : 'Добавить папку', 'folder', dirConnect));
+    rows.push(h('i', { class: 'psep' }), item('Добавить в проект', 'list', pickProjectForNew, '', true), item('Skills', 'bolt', openSkills, '', true), item('Память', 'brain', openMemory, '', true));
+    plusPop = h('div', { class: 'popmenu up', role: 'menu' }, rows);
     var r = $('#pick').getBoundingClientRect();
     plusPop.style.left = Math.max(10, r.left) + 'px'; plusPop.style.bottom = (window.innerHeight - r.top + 10) + 'px';
     document.body.append(plusPop); $('#pick').classList.add('on');
