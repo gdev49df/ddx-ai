@@ -506,6 +506,9 @@
       if (m.text) el.append(h('p', { text: m.text, raw: 1 }));
       if (m.text) { var eb = h('button', { class: 'medit', type: 'button', 'aria-label': 'изменить' }, icon('edit')); eb.addEventListener('click', function (e) { e.stopPropagation(); editMsg(m, el); }); el.append(eb); }
       if (fresh) el.classList.add('rise');
+    } else if (window.DDXGames && DDXGames.isGame(m.text)) {
+      el = h('div', { class: 'msg ai game' }, DDXGames.mount(m, save));
+      if (fresh) el.classList.add('rise');
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
       if (m.src && m.src.length) el.append(h('div', { class: 'srcs' }, h('span', { class: 'srcs-t', text: 'Источники' }), m.src.map(function (s, i) {
@@ -2640,6 +2643,10 @@
     hero.hidden = true; updateHeader();
     chat.append(msgEl(m, true)); showSkillbar(); closeSkillPop();
     toBottom(true);
+    if (window.DDXGames && !pics.length && !docs.length && DDXGames.trigger(text)) {
+      var gm = { id: uid(), at: Date.now(), role: 'assistant', text: '::game::', thumbs: [], next: [] };
+      c.msgs.push(gm); save(); chat.append(msgEl(gm, true)); toBottom(true); return;
+    }
     request();
   }
 
@@ -2652,6 +2659,7 @@
       if (m.files && m.files.length) fileAt = i;
     });
     recent.forEach(function (m, i) {
+      if (window.DDXGames && DDXGames.isGame(m.text)) return;
       var o = { role: m.role, content: m.text || '' }, note = '';
       if (m.role === 'user') { var so = skillOf(null, m.text); if (so && so.inline) o.content = so.rest || 'Выполни инструкцию навыка.'; }
       if (m.role === 'user' && m.files && m.files.length) {

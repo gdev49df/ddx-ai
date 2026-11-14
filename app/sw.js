@@ -1,11 +1,11 @@
 // при изменении файлов меняй версию, чтобы кэш обновился
-const CACHE = 'wchat-v111';
+const CACHE = 'wchat-v112';
 const FILES = [
   './',
   './index.html',
   './styles.css',
   './theme.js',
-  './tg.js',
+  './tg.js', './games.js',
   './chat.js',
   './i18n.js',
   './legal.css',
