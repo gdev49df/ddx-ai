@@ -2911,7 +2911,7 @@
     var bar = $('#dirbar'); if (!bar) return;
     if (!dirH) { bar.hidden = true; bar.replaceChildren(); measure(); return; }
     var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'отключить папку' }, icon('close')); x.addEventListener('click', function (e) { e.stopPropagation(); dirDisconnect(); });
-    var lab = dirNeedPerm ? 'папка «' + dirH.name + '»: нажми, чтобы разрешить' : 'папка «' + dirH.name + '»' + (dirBusy ? ' · читаю…' : dirErr ? ' · не удалось прочитать' : dirFiles.length ? ' · ' + dirFiles.length + ' ' + (dirFiles.length % 10 === 1 && dirFiles.length % 100 !== 11 ? 'файл' : dirFiles.length % 10 >= 2 && dirFiles.length % 10 <= 4 && (dirFiles.length % 100 < 10 || dirFiles.length % 100 >= 20) ? 'файла' : 'файлов') : ' · нет подходящих файлов');
+    var lab = dirH.name + (dirNeedPerm ? ' · нажми, чтобы разрешить' : dirErr ? ' · не удалось прочитать' : '');
     bar.hidden = false; bar.replaceChildren(icon('folder'), h('span', { text: lab, raw: 1 }), x); measure();
     bar.onclick = function () { if (!dirNeedPerm) { if (!dirBusy) { dirIndex(true); showDirbar(); } return; } dirH.requestPermission({ mode: 'read' }).then(function (p) { if (p === 'granted') { dirNeedPerm = false; dirIndex(true); } showDirbar(); }); };
   }

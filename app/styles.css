@@ -1459,3 +1459,8 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .fc-btn.warn { background: #e8a33a; color: #1a1205; }
 .fc-btn:disabled { opacity: .55; cursor: default; }
 #dirbar { cursor: pointer; }
+
+#dirbar { background: rgb(var(--w) / .08); color: var(--ink); font-weight: 500; min-height: 32px; padding: 0 4px 0 11px; gap: 7px; line-height: 1; }
+#dirbar span { line-height: 1; padding-bottom: 1px; }
+#dirbar svg.i { color: var(--mute); }
+#dirbar .sk-x { width: 24px; height: 24px; background: rgb(var(--w) / .1); }
