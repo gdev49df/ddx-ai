@@ -2798,7 +2798,7 @@
       var plans = false;
       if (x.st === 429) {
         setLeft({ left: typeof j.left === 'number' ? j.left : 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
-        if (j.need > 1 && j.left > 0) { msg = 'для этой модели нужно ' + j.need + ' сообщения из лимита, а осталось ' + j.left + '. выбери модель попроще или подожди' + until; plans = false; }
+        if (j.need > 1 && j.left > 0) { msg = 'для этой модели нужно ' + j.need + ' сообщения из лимита, а осталось ' + j.left + '. Выбери модель попроще или подожди' + until; plans = false; }
         else msg = (sub ? 'лимит на 12 часов исчерпан' + until + '. можно взять тариф побольше' : 'лимит на 12 часов исчерпан' + until + '. или возьми тариф'); plans = true;
       }
       else if (j.error === 'code' || j.error === 'expired') {
@@ -2813,7 +2813,7 @@
     }).catch(function (e) {
       if (here()) setThinking(false);
       if (stopped) { toast('остановил'); return; }
-      var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. проверь интернет';
+      var msg = e && e.name === 'AbortError' ? 'ответ идёт слишком долго, попробуй ещё раз' : 'нет связи с воркером. Проверь интернет';
       if (here()) showError(msg); else toast(msg);
     }).then(function () { busy = false; busyChat = null; reqCtl = null; stopped = false; syncSend(); showSugg(); });
   }
@@ -2975,7 +2975,7 @@
     rootEl.style.setProperty('--app-y', Math.round(yy) + 'px');
     rootEl.style.setProperty('--kb', kbh + 'px');
     rootEl.classList.toggle('kbopen', kbh > 0);
-    if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
+    if (!typingNow && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
   }
   var vvRaf = 0, vvTick = function () { if (vvRaf) return; vvRaf = requestAnimationFrame(function () { vvRaf = 0; vvSync(); }); };
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', vvTick); window.visualViewport.addEventListener('scroll', vvTick); }
