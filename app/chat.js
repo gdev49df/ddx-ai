@@ -2959,9 +2959,19 @@
   // когда открывается клавиатура, оболочка уменьшается, поле ввода (оно внутри оболочки) остаётся над клавиатурой
   var rootEl = document.documentElement;
   function vvSync() {
-    var vp = window.visualViewport, hh = vp ? vp.height : window.innerHeight, yy = vp ? vp.offsetTop : 0;
-    var kbh = Math.max(0, Math.round(window.innerHeight - hh - yy));
-    if (kbh < 120) kbh = 0;
+    var vp = window.visualViewport, ae = document.activeElement;
+    var typingNow = !!ae && (/^(input|textarea)$/i.test(ae.tagName || '') || ae.isContentEditable);
+    var standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    var hh, yy = 0, kbh = 0;
+    if (typingNow && vp) {
+      // клавиатура открыта: оболочка занимает видимую область над ней
+      hh = vp.height; yy = vp.offsetTop; kbh = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
+      if (kbh < 120) kbh = 0;
+    } else {
+      // без ввода высоту visualViewport не используем: после клавиатуры iOS иногда оставляет её заниженной и приложение зависает выше низа
+      hh = window.innerHeight;
+      if (standalone && window.screen && window.innerWidth < window.innerHeight) hh = Math.max(hh, window.screen.height);
+    }
     rootEl.style.setProperty('--app-h', Math.round(hh) + 'px');
     rootEl.style.setProperty('--app-y', Math.round(yy) + 'px');
     rootEl.style.setProperty('--kb', kbh + 'px');
@@ -2974,7 +2984,7 @@
   ['pageshow', 'orientationchange', 'focusout'].forEach(function (ev) { window.addEventListener(ev, function () { setTimeout(vvSync, 60); setTimeout(vvSync, 400); }); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { vvSync(); setTimeout(vvSync, 300); } });
   vvSync();
-  ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(function () { toBottom(true); }, 320); });
+  ta.addEventListener('focus', function () { document.body.classList.add('typing'); setTimeout(vvSync, 50); setTimeout(vvSync, 350); setTimeout(function () { toBottom(true); }, 320); });
   ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) document.body.classList.remove('typing'); vvSync(); }, 60); });
 
   // горячие клавиши на компьютере: ctrl/cmd+k поиск по чатам, / в поле ввода, ctrl/cmd+shift+o не трогаем (занято браузером)
