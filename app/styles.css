@@ -1420,5 +1420,5 @@ html.kbopen body .app .composer { padding-bottom: 6px; }
 html.tg, html.tg body { overscroll-behavior: none; }
 html.tg .install-hint, html.tg #install { display: none !important; }
 /* в Telegram строку чата поднимаем над жестом «домой» */
-html.tg body .app .composer { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+html.tg body .app .composer { padding-bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px), 22px) + 12px); }
 html.tg body.typing .app .composer { padding-bottom: 8px; }
