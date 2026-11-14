@@ -132,7 +132,7 @@
     try { d = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { d = null; }
     if (d && Array.isArray(d.chats)) {
       S.chats = d.chats.map(function (c) {
-        return { id: c.id || uid(), title: String(c.title || 'чат'), pinned: !!c.pinned, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), ord: typeof c.ord === 'number' ? c.ord : null, msgs: cleanMsgs(c.msgs) };
+        return { id: c.id || uid(), title: String(c.title || 'чат'), pinned: !!c.pinned, unread: !!c.unread, project: c.project || null, created: c.created || Date.now(), updated: c.updated || Date.now(), ord: typeof c.ord === 'number' ? c.ord : null, msgs: cleanMsgs(c.msgs) };
       });
       S.projects = (Array.isArray(d.projects) ? d.projects : []).map(function (p) { return { id: p.id || uid(), name: String(p.name || 'проект'), instructions: String(p.instructions || ''), files: Array.isArray(p.files) ? p.files.filter(function (f) { return f && f.name; }).slice(0, 20).map(function (f) { return { name: String(f.name).slice(0, 60), text: String(f.text || '').slice(0, 15000) }; }) : [], created: p.created || Date.now(), ord: typeof p.ord === 'number' ? p.ord : null }; });
       S.settings = Object.assign(S.settings, d.settings || {});
@@ -157,7 +157,7 @@
     return JSON.stringify({
       v: 3, cur: S.cur, open: S.open, settings: S.settings, projects: S.projects,
       chats: S.chats.slice(0, 150).map(function (c) {
-        return { id: c.id, title: c.title, pinned: c.pinned, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
+        return { id: c.id, title: c.title, pinned: c.pinned, unread: c.unread ? 1 : 0, project: c.project, created: c.created, updated: c.updated, ord: c.ord == null ? null : c.ord,
           msgs: c.msgs.slice(-80).map(function (m) { return { at: m.at || 0, fb: m.fb || '', src: m.src || [], role: m.role, text: m.text, thumbs: stripThumbs ? [] : (m.thumbs || []), files: (m.files || []).map(function (f) { return { name: f.name, text: stripThumbs ? '' : f.text }; }), alts: m.alts || null, vi: m.vi || 0, next: m.next || [] }; }) };
       })
     });
@@ -848,7 +848,7 @@
     save(); renderAll(); syncSend(); scroller.scrollTop = 0;
     if (!coarse) ta.focus();
   }
-  function openChat(id) { setTab('chat'); S.cur = id; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
+  function openChat(id) { setTab('chat'); S.cur = id; var oc = S.chats.filter(function (x) { return x.id === id; })[0]; if (oc && oc.unread) oc.unread = false; S.pendingProject = null; save(); renderAll(); requestAnimationFrame(function () { toBottom(false); }); }
   function ensureChat() {
     var c = curChat();
     if (c) return c;
@@ -1077,10 +1077,12 @@
     var showSearch = function () { setDrawer(false); openSearch(); };
     var srow = function (c, pin) {
       var more = h('button', { class: 'srow-more', type: 'button', 'aria-label': 'действия' }, icon('more'));
-      more.addEventListener('click', function (e) { e.stopPropagation(); chatMenu(c); });
-      var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title, raw: 1 }));
+      more.addEventListener('click', function (e) { e.stopPropagation(); if (wide()) rowMenu(c, more.getBoundingClientRect(), more); else chatMenu(c); });
+      var main = h('button', { class: 'srow-main', type: 'button', title: c.title }, pin ? icon('chat') : null, h('span', { text: c.title, raw: 1 }), c.unread ? h('i', { class: 'udot', 'aria-label': 'не прочитан' }) : null);
       main.addEventListener('click', function () { openChat(c.id); closeSheet(); setDrawer(false); });
-      var rw = h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : ''), 'data-id': c.id }, main, more); return rw;
+      var rw = h('div', { class: 'srow' + (c.id === S.cur ? ' cur' : ''), 'data-id': c.id }, main, more);
+      rw.addEventListener('contextmenu', function (e) { if (!wide()) return; e.preventDefault(); rowMenu(c, { left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }, more); });
+      return rw;
     };
     var sortTool = function () {
       var b = h('button', { class: 'stool', type: 'button', 'aria-label': 'сортировка', title: 'Сортировка' }, icon('sort'));
@@ -1319,6 +1321,76 @@
     inp.focus();
   }
 
+  /* меню чата в боковой панели: отметка, закрепить, переименовать, проект, удалить */
+  var rowPop = null;
+  function closeRowMenu() { if (!rowPop) return; var p = rowPop; rowPop = null; p.root.classList.add('out'); if (p.sub) p.sub.remove(); setTimeout(function () { p.root.remove(); }, 160); if (p.btn) p.btn.classList.remove('on'); document.removeEventListener('pointerdown', p.away, true); document.removeEventListener('keydown', p.key, true); }
+  function rowMenu(c, rect, btn) {
+    closeRowMenu();
+    var armed = false, subEl = null, subTimer = 0, st = {};
+    var kb = function (k) { return h('span', { class: 'pk', text: k }); };
+    var item = function (label, fn, o) {
+      o = o || {};
+      var b = h('button', { class: 'rmi' + (o.cls ? ' ' + o.cls : ''), type: 'button', role: 'menuitem' }, h('span', { text: label }), o.key ? kb(o.key) : null, o.arrow ? icon('chev') : null);
+      if (fn) b.addEventListener('click', function (e) { e.stopPropagation(); fn(b); });
+      return b;
+    };
+    var act = function (fn) { return function () { closeRowMenu(); fn(); }; };
+    var doUnread = act(function () { c.unread = !c.unread; save(); renderAll(); });
+    var doPin = act(function () { if (togglePin(c)) toast(c.pinned ? 'Чат закреплён' : 'Чат откреплён'); });
+    var doRename = act(function () { renameChat(c); });
+    var doDel = function (b) {
+      if (!armed) { armed = true; b.querySelector('span').textContent = 'Точно удалить?'; b.classList.add('armed'); setTimeout(function () { armed = false; if (b.isConnected) { b.querySelector('span').textContent = 'Удалить'; b.classList.remove('armed'); } }, 3000); return; }
+      closeRowMenu(); deleteChat(c);
+    };
+    var closeSub = function () { if (subEl) { subEl.remove(); subEl = null; } if (rowPop && rowPop.sub) rowPop.sub = null; projBtn.classList.remove('open'); };
+    var openSub = function () {
+      if (subEl) return;
+      subEl = h('div', { class: 'rowmenu sub', role: 'menu' });
+      var put = function (label, id, ic) {
+        var on = (c.project || null) === id;
+        var b = h('button', { class: 'rmi', type: 'button', role: 'menuitem' }, icon(ic), h('span', { text: label, raw: 1 }), on ? icon('check') : null);
+        b.addEventListener('click', function (e) { e.stopPropagation(); closeRowMenu(); c.project = id; save(); updateHeader(); renderAll(); });
+        subEl.append(b);
+      };
+      put('Без проекта', null, 'list');
+      S.projects.slice().sort(byProj).forEach(function (p) { put(p.name, p.id, 'folder'); });
+      subEl.append(h('i', { class: 'rsep' }), item('+ Новый проект', function () { closeRowMenu(); projectForm(null, c); }));
+      document.body.append(subEl);
+      var pr = root.getBoundingClientRect(), br = projBtn.getBoundingClientRect(), w = subEl.offsetWidth, hh = subEl.offsetHeight;
+      var left = pr.right + 4; if (left + w > window.innerWidth - 8) left = Math.max(8, pr.left - w - 4);
+      subEl.style.left = left + 'px'; subEl.style.top = Math.max(8, Math.min(br.top - 6, window.innerHeight - hh - 8)) + 'px';
+      projBtn.classList.add('open'); if (rowPop) rowPop.sub = subEl;
+    };
+    var projBtn = item('Добавить в проект', null, { arrow: true });
+    projBtn.addEventListener('click', function (e) { e.stopPropagation(); subEl ? closeSub() : openSub(); });
+    projBtn.addEventListener('mouseenter', function () { clearTimeout(subTimer); subTimer = setTimeout(openSub, 120); });
+    var root = h('div', { class: 'rowmenu', role: 'menu' },
+      item(c.unread ? 'Отметить как прочитанное' : 'Отметить как непрочитанное', doUnread, { key: 'U' }),
+      h('i', { class: 'rsep' }),
+      item(c.pinned ? 'Открепить' : 'Закрепить', doPin, { key: 'P' }),
+      item('Переименовать', doRename, { key: 'R' }),
+      projBtn,
+      h('i', { class: 'rsep' }),
+      item('Удалить', doDel, { key: 'D', cls: 'danger' }));
+    [].forEach.call(root.children, function (el) { if (el !== projBtn && el.classList.contains('rmi')) el.addEventListener('mouseenter', function () { clearTimeout(subTimer); subTimer = setTimeout(closeSub, 120); }); });
+    document.body.append(root);
+    var w = root.offsetWidth, hh = root.offsetHeight;
+    var left = rect.right + 6; if (left + w > window.innerWidth - 8) left = Math.max(8, rect.left - w - 6);
+    var top = rect.top; if (top + hh > window.innerHeight - 8) top = Math.max(8, window.innerHeight - hh - 8);
+    root.style.left = left + 'px'; root.style.top = top + 'px';
+    if (btn) btn.classList.add('on');
+    st.root = root; st.btn = btn;
+    st.away = function (e) { if (!root.contains(e.target) && !(subEl && subEl.contains(e.target))) closeRowMenu(); };
+    st.key = function (e) {
+      if (e.key === 'Escape') { closeRowMenu(); return; }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      var k = e.key.toLowerCase(), map = { u: doUnread, p: doPin, r: doRename, d: function () { doDel(root.lastChild); } };
+      var ru = { 'г': 'u', 'з': 'p', 'к': 'r', 'в': 'd' }; if (ru[k]) k = ru[k];
+      if (map[k]) { e.preventDefault(); e.stopPropagation(); map[k](); }
+    };
+    rowPop = st;
+    setTimeout(function () { document.addEventListener('pointerdown', st.away, true); document.addEventListener('keydown', st.key, true); }, 0);
+  }
   function chatMenu(c) {
     var opt = function (label, ic, fn) { var b = h('button', { class: 'btn block opt', type: 'button' }, h('span', { text: label }), icon(ic)); b.addEventListener('click', fn); return b; };
     var pr = projectById(c.project);
@@ -3266,7 +3338,7 @@
   $('#more').addEventListener('click', function (e) { e.stopPropagation(); openPop(); });
   document.addEventListener('pointerdown', function (e) { if (popEl && !popEl.contains(e.target) && !e.target.closest('#more, .sfoot')) closePop(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePop(); });
-  window.addEventListener('resize', closePop);
+  window.addEventListener('resize', closePop); window.addEventListener('resize', closeRowMenu);
   $('#menu').append(icon('gear')); $('#menu').addEventListener('click', openMenu);
   HINTS.forEach(function (q, i) {
     $('#chips').append(h('button', { class: 'chip', type: 'button', text: q, onclick: function () { if (i === HINTS.length - 1) $('#file').click(); else send(q); } }));

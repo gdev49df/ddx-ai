@@ -1466,3 +1466,19 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 #dirbar .sk-x { width: 24px; height: 24px; background: rgb(var(--w) / .1); }
 /* плашка папки вписана в угол карточки: одинаковый отступ сверху и слева, радиус 16 = 28 − 12 */
 .app .composer .card > #dirbar { margin: 4px 0 2px 0; border-radius: 16px; min-height: 32px; max-width: calc(100% - 4px); }
+
+/* меню чата в боковой панели */
+.rowmenu { position: fixed; z-index: 120; min-width: 262px; padding: 6px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); box-shadow: 0 14px 38px rgba(0,0,0,.4); animation: rise .16s var(--ease) both; transform-origin: top left; }
+.rowmenu.out { opacity: 0; transform: scale(.97); transition: opacity .14s, transform .14s; pointer-events: none; }
+.rowmenu.sub { min-width: 210px; z-index: 121; }
+.rmi { all: unset; box-sizing: border-box; width: 100%; min-height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 10px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--ink); cursor: pointer; }
+.rmi span:first-child, .rmi > span:not(.pk) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmi svg.i { width: 16px; height: 16px; flex: none; color: var(--silver); }
+.rmi .pk { margin-left: auto; padding-left: 16px; flex: none; font-size: 12.5px; font-weight: 600; color: var(--mute); }
+.rmi:hover, .rmi:focus-visible, .rmi.open { background: rgb(var(--w) / .09); }
+.rmi.danger, .rmi.danger .pk { color: var(--err); }
+.rmi.danger:hover { background: rgb(255 138 128 / .12); }
+.rmi.armed { background: rgb(255 138 128 / .16); }
+.rsep { display: block; height: 1px; margin: 5px 6px; background: var(--line); }
+.udot { flex: none; width: 8px; height: 8px; margin-left: 2px; border-radius: 50%; background: var(--ink); }
+.srow:hover .udot, .srow-more.on ~ .udot { opacity: 0; }
