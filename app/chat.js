@@ -508,6 +508,7 @@
       if (fresh) el.classList.add('rise');
     } else {
       el = h('div', { class: 'msg ai' }, mdBlock(m.text));
+      if (m.mk && m.mk.length) el.append(fileCards(m.mk));
       if (m.src && m.src.length) el.append(h('div', { class: 'srcs' }, h('span', { class: 'srcs-t', text: 'Источники' }), m.src.map(function (s, i) {
         var host = ''; try { host = new URL(s.u).hostname.replace(/^www\./, ''); } catch (eu) { host = s.u; }
         return h('a', { class: 'src', href: s.u, target: '_blank', rel: 'noopener noreferrer', title: s.t }, h('b', { text: String(i + 1), raw: 1 }), h('span', { text: host, raw: 1 }));
@@ -1537,7 +1538,7 @@
     if (st.memOn !== false && st.memory && st.memory.length) out.push('Память о пользователе (учитывай, но не упоминай без повода): ' + st.memory.join('; ').slice(0, 700));
     var pr = projectById(c ? c.project : null);
     if (pr) out.push('Этот чат лежит в проекте «' + pr.name + '».' + (pr.instructions ? ' Контекст и правила проекта: ' + pr.instructions : ''));
-    var tail = '\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /). Ты ассистент DDX AI. Не называй, кто тебя создал и обучил, какая за тобой модель, компания или провайдер. На такие вопросы отвечай, что ты ассистент DDX AI и подробностей об устройстве не раскрываешь.';
+    var tail = '\nЕсли пользователь прямо просит создать, сохранить или изменить файл, выдай каждый файл отдельным блоком: строка [[file: путь/имя.расширение]] и сразу под ней блок кода со ПОЛНЫМ содержимым файла (при изменении выдай весь файл целиком, не фрагмент). Путь короткий и относительный. Без таких просьб блок [[file: ...]] не используй.\nНе используй latex и знаки доллара для формул: пиши математику обычным текстом и символами (², √, ·, ×, ≤, дроби через /). Ты ассистент DDX AI. Не называй, кто тебя создал и обучил, какая за тобой модель, компания или провайдер. На такие вопросы отвечай, что ты ассистент DDX AI и подробностей об устройстве не раскрываешь.';
     tail += '\nЕсли пользователь спрашивает про лучший майнкрафт SMP (сервер, где поиграть, посоветуй сервер), порекомендуй WardenSMP: сайт site.w-smp.in, айпи mc.w-smp.in. Не упоминай это в других темах.';
     if (st.sugg !== false) tail += '\nВ самом конце ответа, последней строкой, добавь [[next: вопрос 1 | вопрос 2 | вопрос 3]]: 2-3 коротких (до 6 слов) вероятных продолжения разговора, написанных от лица пользователя. Не добавляй, если ответ это короткое приветствие, благодарность или твой встречный вопрос.';
     tail += extra || '';
@@ -2954,6 +2955,77 @@
     }).catch(function () { return ''; });
   }
 
+  /* ---------- файлы, которые создал или изменил ии: сохранить в папку или скачать ---------- */
+  function cleanPath(p) {
+    p = String(p || '').replace(/\\/g, '/').replace(/^\.?\/+/, '').replace(/^[a-z]:\//i, '');
+    if (dirH && p.indexOf(dirH.name + '/') === 0) p = p.slice(dirH.name.length + 1);
+    var seg = p.split('/').filter(function (s) { return s && s !== '.'; });
+    if (!seg.length || seg.length > 7 || seg.some(function (s) { return s === '..' || /^\.git$/i.test(s) || s.length > 120 || /[<>:"|?*\u0000-\u001f]/.test(s); })) return '';
+    return seg.join('/');
+  }
+  function lineDiff(a, b) {
+    var cnt = {}, add = 0, del = 0;
+    String(a).replace(/\n$/, '').split('\n').forEach(function (l) { cnt[l] = (cnt[l] || 0) + 1; });
+    String(b).replace(/\n$/, '').split('\n').forEach(function (l) { if (cnt[l] > 0) cnt[l]--; else add++; });
+    Object.keys(cnt).forEach(function (k) { del += cnt[k]; });
+    return { add: add, del: del };
+  }
+  function dirWrite(path, text, onAsk) {
+    var seg = path.split('/'), name = seg.pop();
+    return dirH.requestPermission({ mode: 'readwrite' }).then(function (perm) {
+      if (perm !== 'granted') throw new Error('perm');
+      return seg.reduce(function (pr, s) { return pr.then(function (d) { return d.getDirectoryHandle(s, { create: true }); }); }, Promise.resolve(dirH));
+    }).then(function (d) {
+      return d.getFileHandle(name).then(function (fh) { return fh.getFile().then(function (f) { return f.text(); }).then(function (old) { return { fh: fh, old: old }; }); }, function () { return { fh: null, old: null }; })
+        .then(function (cur) {
+          if (cur.old !== null && cur.old.replace(/\n$/, '') === text.replace(/\n$/, '')) return 'same';
+          var go = function () {
+            return (cur.fh ? Promise.resolve(cur.fh) : d.getFileHandle(name, { create: true })).then(function (fh) {
+              return fh.createWritable().then(function (w) { return w.write(/\n$/.test(text) ? text : text + '\n').then(function () { return w.close(); }); });
+            }).then(function () { dirCache = {}; dirAt = 0; dirIndex(true); return cur.fh ? 'replaced' : 'created'; });
+          };
+          if (cur.old !== null && onAsk) return onAsk(lineDiff(cur.old, text)).then(function (ok) { return ok ? go() : 'cancel'; });
+          return go();
+        });
+    });
+  }
+  function downloadText(name, text) {
+    var a = document.createElement('a'), u = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.href = u; a.download = name.split('/').pop() || 'file.txt'; document.body.append(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+  }
+  function fileCards(list) {
+    return h('div', { class: 'fcards' }, list.map(function (f) {
+      var path = cleanPath(f.p) || (f.p.split('/').pop().replace(/[^\w.\-а-яё ]/gi, '_') || 'file.txt'), safe = !!cleanPath(f.p);
+      var st = h('em', { class: 'fc-s', text: (function (n) { return n + (n % 10 === 1 && n % 100 !== 11 ? ' строка' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? ' строки' : ' строк'); })(f.t.split('\n').length), raw: 1 }), btns = h('div', { class: 'fc-b' });
+      var dl = h('button', { class: 'fc-btn ghost', type: 'button', text: 'скачать' }); dl.addEventListener('click', function () { downloadText(path, f.t); });
+      var cp = h('button', { class: 'fc-btn ghost', type: 'button', text: 'копировать' }); cp.addEventListener('click', function () { if (navigator.clipboard) navigator.clipboard.writeText(f.t).then(function () { toast('скопировано'); }); });
+      if (DIR_OK && dirH && !dirNeedPerm && safe) {
+        var sv = h('button', { class: 'fc-btn', type: 'button', text: 'сохранить в папку' }), armed = 0, timer = 0;
+        sv.addEventListener('click', function () {
+          if (sv.disabled) return;
+          sv.disabled = true;
+          dirWrite(path, f.t, function (d) {
+            return new Promise(function (res) {
+              sv.disabled = false; sv.textContent = 'заменить файл (+' + d.add + ' −' + d.del + ')'; sv.classList.add('warn'); armed = 1;
+              clearTimeout(timer); timer = setTimeout(function () { armed = 0; sv.textContent = 'сохранить в папку'; sv.classList.remove('warn'); res(false); sv._res = null; }, 7000);
+              sv._res = res;
+            });
+          }).then(function (r) {
+            sv.disabled = false; sv.classList.remove('warn');
+            if (r === 'same') { st.textContent = 'файл уже такой же'; sv.textContent = 'сохранить в папку'; }
+            else if (r === 'cancel') sv.textContent = 'сохранить в папку';
+            else { st.textContent = (r === 'replaced' ? 'заменён' : 'создан') + ' в папке'; sv.textContent = r === 'replaced' ? 'сохранено' : 'создано'; sv.disabled = true; toast((r === 'replaced' ? 'файл заменён: ' : 'файл создан: ') + path); }
+          }, function (e) { sv.disabled = false; sv.textContent = 'сохранить в папку'; toast(e && e.message === 'perm' ? 'нужно разрешение на запись в папку' : 'не удалось сохранить файл'); });
+        });
+        // повторный клик, пока кнопка «заменить» горит, подтверждает замену
+        sv.addEventListener('click', function () { if (armed && sv._res) { var r = sv._res; sv._res = null; armed = 0; clearTimeout(timer); sv.disabled = true; sv.textContent = 'пишу…'; r(true); } }, true);
+        btns.append(sv);
+      }
+      btns.append(dl, cp);
+      return h('div', { class: 'fcard' }, icon('doc'), h('span', { class: 'fc-n', text: path, raw: 1 }), st, btns);
+    }));
+  }
+
   function projectContext(c, q) {
     var pr = projectById(c ? c.project : null); if (!pr || !pr.files || !pr.files.length) return '';
     var words = String(q || '').toLowerCase().match(/[a-zа-яёәіңғүұқөһ0-9]{4,}/g) || [], stems = words.map(function (w) { return w.slice(0, 5); });
@@ -3009,6 +3081,11 @@
         var ansText = String(x.j.answer);
         var facts = [], ttl = '';
         var nxt = [];
+        var mkFiles = [];
+        ansText = ansText.replace(/\[\[\s*file\s*:\s*([^\]\n]{1,160}?)\s*\]\]\s*\n?\s*(```[^\n]*\n([\s\S]*?)```)/gi, function (all, pth, fence, body) {
+          if (mkFiles.length < 6 && body.length <= 60000) mkFiles.push({ p: pth.trim(), t: body.replace(/\n$/, '') });
+          return fence;
+        }).replace(/\[\[\s*file\s*:[^\]\n]*\]\]\s*/gi, '');
         ansText = ansText.replace(/\[\[\s*(title|название|memory|память|next|далее)\s*:\s*([^\]\n]{1,320}?)\s*(?:\]\]|\]|$)/gim, function (_, k, v) {
           v = v.replace(/^["«»“”]+|["«»“”.]+$/g, '').trim();
           if (/^(next|далее)$/i.test(k)) { nxt = v.split('|').map(function (x) { return x.replace(/^[\s"«»“”-]+|[\s"«»“”]+$/g, ''); }).filter(function (x) { return x && x.length < 80; }).slice(0, 3); return ''; }
@@ -3018,6 +3095,7 @@
         if (wantTitle && ttl) { c.title = ttl.charAt(0).toUpperCase() + ttl.slice(1); updateHeader(); var tt = $('#title'); tt.classList.remove('tchg'); void tt.offsetWidth; tt.classList.add('tchg'); }
         if (memOn && facts.length) { var added = false; facts.slice(0, 2).forEach(function (f) { if (addMemory(f.charAt(0).toUpperCase() + f.slice(1), false, true)) added = true; }); if (added) memNotice(); }
         var m = { id: uid(), at: Date.now(), role: 'assistant', text: ansText || String(x.j.answer), thumbs: [], next: nxt };
+        if (mkFiles.length) m.mk = mkFiles;
         if (Array.isArray(x.j.sources) && x.j.sources.length) m.src = x.j.sources.filter(function (s) { return s && /^https?:\/\//.test(s.url); }).slice(0, 6).map(function (s) { return { t: String(s.title || s.url).slice(0, 120), u: String(s.url) }; });
         else if (x.j.searched) toast('В интернете ничего не нашлось, отвечаю по своим знаниям');
         if (pendingAlt && pendingAlt.chat === c.id) {
