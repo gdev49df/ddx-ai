@@ -1399,3 +1399,8 @@ html.kbopen body .app .composer { padding-bottom: 8px; }
 
 /* в Safari (не установлено на экран) поле ввода стоит вплотную над адресной строкой: нижний отступ не нужен */
 html:not(.standalone) body .app .composer, html:not(.standalone) body.typing .app .composer { padding-bottom: 6px; }
+
+/* на весь экран: оболочка прижата к верху и низу (в установленном приложении iPhone innerHeight бывает короче экрана, отсюда «невидимая адресная строка») */
+.app { top: 0; bottom: 0; height: var(--app-h, auto); }
+html.standalone body .app .composer, html.standalone body.typing .app .composer { padding-bottom: max(10px, calc(env(safe-area-inset-bottom) - 12px)); }
+html.kbopen body .app .composer { padding-bottom: 8px; }

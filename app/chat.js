@@ -2972,7 +2972,7 @@
       // без ввода высоту visualViewport не используем: после клавиатуры iOS иногда оставляет её заниженной и приложение зависает выше низа
       hh = window.innerHeight;
     }
-    rootEl.style.setProperty('--app-h', Math.round(hh) + 'px');
+    if (typingNow && vp) rootEl.style.setProperty('--app-h', Math.round(hh) + 'px'); else rootEl.style.removeProperty('--app-h');
     rootEl.style.setProperty('--app-y', Math.round(yy) + 'px');
     rootEl.style.setProperty('--kb', kbh + 'px');
     rootEl.classList.toggle('kbopen', kbh > 0);
