@@ -7,7 +7,7 @@
 
 const APP = 'https://gdev49df.github.io/ddx-ai/app/';
 const VIDEO = 'https://gdev49df.github.io/ddx-ai/assets/start.mp4';
-const SUPPORT = 'https://t.me/bauyrzhanov_12_';
+const SUPPORT = 'https://t.me/ddwwks';
 
 const WELCOME =
   'DDX AI — умный ии-чат прямо в telegram.\n\n' +
