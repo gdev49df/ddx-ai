@@ -3396,17 +3396,6 @@
   refreshSide();
   toBottom(false);
 
-  /* белые точки: мерцающий фон и круг от касания */
-  (function () {
-    var layer = h('div', { class: 'dotfield', 'aria-hidden': 'true' }), n = 22;
-    for (var i = 0; i < n; i++) {
-      var d = h('i'), sz = (1.5 + Math.random() * 2.5).toFixed(1);
-      d.style.cssText = 'left:' + (Math.random() * 100).toFixed(1) + '%;top:' + (Math.random() * 100).toFixed(1) + '%;width:' + sz + 'px;height:' + sz + 'px;animation-delay:' + (-Math.random() * 9).toFixed(1) + 's;animation-duration:' + (5 + Math.random() * 6).toFixed(1) + 's';
-      layer.append(d);
-    }
-    document.body.prepend(layer);
-  })();
-
   var splash = $('#splash');
   $('#splash-logo').append(logo('logo big'));
   $('#hero-logo').append(logo('logo herologo'));
