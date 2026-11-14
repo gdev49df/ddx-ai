@@ -2693,10 +2693,49 @@
     if (lastSend && now - lastSend > 10 * 60000) { sessAt = 0; lastSend = 0; }
     if (m > 0 && sessAt && now - sessAt >= m * 60000) { sessAt = now; toast('Пора сделать перерыв: ты общаешься уже ' + (m >= 60 ? (m / 60) + ' ч' : m + ' мин')); }
   }, 30000);
+  /* ---------- оскорбления: после третьего чат блокируется на 15 секунд ---------- */
+  var INS_STRONG = /(дебил|идиот|кретин|имбецил|даун\b|ублюд|мраз[ьиоа]|твар[ьи]\b|говнюк|гнид[аы]|скотин|придур|чмо\b|шлюх|пидор|пидр[аио]|хуесос|еблан|долбоеб|мудак|мудил|сдохни|сдохн|залуп|уебан|уебищ|ушлепок|урод\b|уродин|ничтожеств|никчемн)/;
+  var INS_MAT = /(хуй|хуе|хуя|пизд|ебан|ебал|ебат|блят|бляд|сука|суки|сучар|нахуй|нахер|нахрен|гандон|пиздец)/;
+  var INS_YOU = /(\bты\b|\bтебя\b|\bтебе\b|\bтвой\b|\bтвоя\b|\bтвои\b|\bвы\b|\bвас\b|\bбот\b|\bбота\b|\bии\b|\bддх|\bddx|нейросет|помощник)/;
+  var INS_PHRASE = /(заткнись|закрой (рот|пасть|варежку|хлебало)|иди (на|в|ты) (хуй|хер|жопу|пизду|нахуй|нахер)|пошел (на|ты)|пошла (на|ты)|пошли (на|вы)|отьебись|отвали от меня|ты (тупой|тупая|тупое|бесполезн|ничтожн|говно|дерьмо|отстой|мусор|ужасн|никчемн|бестолков|жалк)|(тупой|тупая|бесполезный|бесполезная|ужасный|дерьмовый|говняный|бестолковый|жалкий|хуевый) (бот|ии|ддх|ddx|нейросеть|помощник)|(ддх|ddx|бот|ии|нейросеть|ты) (тупой|тупая|тупое|говно|дерьмо|отстой|мусор|урод|тварь|бесполезн|хуйня|параша))/;
+  var INS_EN = /(fuck (you|off)|stupid (bot|ai)|you('re| are| r) (so )?(stupid|useless|trash|garbage|an idiot|dumb|shit)|shut up|piece of (shit|crap))/;
+  function isInsult(t) {
+    t = String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[*_`~]+/g, '');
+    if (!t || t.length > 400) return false;
+    if (INS_PHRASE.test(t) || INS_EN.test(t)) return true;
+    if (INS_STRONG.test(t) || INS_MAT.test(t)) return INS_YOU.test(t) || t.length < 40;
+    return false;
+  }
+  var strikes = [], muteUntil = 0, muteTimer = 0, taHolder = '';
+  function muteTick() {
+    var left = Math.ceil((muteUntil - Date.now()) / 1000);
+    if (left > 0) { ta.placeholder = 'блокировка чата · ' + left + ' с'; return; }
+    clearInterval(muteTimer); muteTimer = 0; muteUntil = 0;
+    ta.disabled = false; ta.placeholder = taHolder; ta.closest('.card') && ta.closest('.card').classList.remove('muted'); syncSend();
+  }
+  function muteChat(sec) {
+    if (!muteTimer) taHolder = ta.getAttribute('placeholder') || '';
+    muteUntil = Date.now() + sec * 1000; ta.value = ''; grow(); ta.blur(); ta.disabled = true; sendBtn.disabled = true;
+    var card = ta.closest('.card'); if (card) card.classList.add('muted');
+    if (!muteTimer) muteTimer = setInterval(muteTick, 250);
+    muteTick();
+  }
+  // true, если сообщение нельзя отправлять (чат заблокирован или это третье оскорбление)
+  function insultGate(text) {
+    if (muteUntil > Date.now()) return true;
+    var now = Date.now(); strikes = strikes.filter(function (x) { return now - x < 600000; });
+    if (!isInsult(text)) return false;
+    strikes.push(now);
+    if (strikes.length > 2) { strikes = []; muteChat(15); toast('чат заблокирован на 15 секунд: не оскорбляй DDX AI'); return true; }
+    if (strikes.length === 2) toast('ещё одно оскорбление, и чат заблокируется на 15 секунд');
+    return false;
+  }
+
   function send(text) {
     if (busy || loading) return;
     text = String(text == null ? ta.value : text).trim();
     if (!text && !atts.length) return;
+    if (insultGate(text)) return;
     if (quietNow()) { toast('Тихие часы: отправка отключена до ' + (S.settings.quietTo || '07:00')); return; }
     lastSend = Date.now(); if (!sessAt) sessAt = lastSend;
     clearError(); showSugg();

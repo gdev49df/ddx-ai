@@ -1430,3 +1430,5 @@ html.tg body .app .bar { padding-top: calc(max(env(safe-area-inset-top, 0px), va
   html body .sheet-panel, html body .sheet-panel.swin { border-radius: 28px; }
   .sheet-panel.swin { margin-bottom: max(24px, 4dvh); }
 }
+
+.card.muted { opacity: .6; } .card.muted #t::placeholder { color: #ff8a80; opacity: 1; }
