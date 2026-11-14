@@ -2709,8 +2709,11 @@
         return it;
       }));
       var r = mb.getBoundingClientRect();
-      mpop.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; mpop.style.left = 'auto'; mpop.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+      mpop.style.bottom = (window.innerHeight - r.top + 8) + 'px'; mpop.style.left = '8px'; mpop.style.right = 'auto';
       document.body.append(mpop); mb.classList.add('open');
+      // меню не должно уходить за левый или правый край (в мини-приложении telegram кнопка стоит ближе к центру)
+      var pw = mpop.offsetWidth, vw = document.documentElement.clientWidth || window.innerWidth;
+      mpop.style.left = Math.round(Math.min(Math.max(8, r.right - pw), vw - pw - 8)) + 'px';
     });
     document.addEventListener('click', function (e) { if (mpop && !mpop.contains(e.target)) closeM(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
