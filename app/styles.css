@@ -1404,3 +1404,8 @@ html:not(.standalone) body .app .composer, html:not(.standalone) body.typing .ap
 .app { top: 0; bottom: 0; height: var(--app-h, auto); }
 html.standalone body .app .composer, html.standalone body.typing .app .composer { padding-bottom: max(10px, calc(env(safe-area-inset-bottom) - 12px)); }
 html.kbopen body .app .composer { padding-bottom: 8px; }
+
+/* ссылки на условия и конфиденциальность */
+.foot.legal { margin-bottom: 4px; }
+.foot.legal a, .legal-cap a { color: inherit; text-decoration: underline; text-decoration-color: rgb(var(--w) / .35); text-underline-offset: 3px; }
+.legal-cap { text-align: center; margin-top: 14px; }

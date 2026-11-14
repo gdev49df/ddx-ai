@@ -1,0 +1,24 @@
+:root { color-scheme: dark; --bg: #08080a; --ink: #f2f2f5; --mute: #9a9aa3; --line: rgba(255, 255, 255, .09); --card: #111114; }
+html[data-theme="light"] { color-scheme: light; --bg: #f3f3f6; --ink: #16161a; --mute: #6b6b75; --line: rgba(0, 0, 0, .1); --card: #fff; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.wrap { max-width: 720px; margin: 0 auto; padding: 18px 20px 56px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0 22px; }
+.back { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 15px; padding: 9px 14px 9px 12px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); }
+.back:active { transform: scale(.96); }
+.brand { font-weight: 800; letter-spacing: .12em; font-size: 14px; color: var(--mute); }
+h1 { font-size: clamp(28px, 7vw, 38px); line-height: 1.1; letter-spacing: -.035em; margin: 6px 0 8px; }
+.date { color: var(--mute); font-size: 14px; margin: 0 0 28px; }
+h2 { font-size: 19px; letter-spacing: -.02em; margin: 34px 0 8px; line-height: 1.25; }
+p, li { color: color-mix(in srgb, var(--ink) 88%, transparent); }
+p { margin: 0 0 12px; }
+ul { margin: 0 0 12px; padding-left: 22px; }
+li { margin: 0 0 6px; }
+a { color: var(--ink); text-underline-offset: 3px; text-decoration-color: var(--mute); }
+.note { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 0 0 8px; }
+.note p { margin: 0; }
+.switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 36px 0 0; }
+.switch a { text-decoration: none; padding: 9px 14px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+.foot { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--mute); font-size: 13px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }

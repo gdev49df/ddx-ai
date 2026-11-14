@@ -676,6 +676,7 @@
     if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
     showHero(); showLeft(); showSugg();
   }
+  function legalLinks() { return h('p', { class: 'foot legal' }, h('a', { href: 'terms.html', text: 'Условия использования' }), ' · ', h('a', { href: 'privacy.html', text: 'Конфиденциальность' })); }
   var scroller = $('#view');
   function toBottom(smooth) { scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
@@ -1798,7 +1799,8 @@
       h('h2', { text: 'Аккаунт' }),
       h('p', { class: 'cap', text: 'С аккаунтом чаты, память, Skills и тариф доступны на всех твоих устройствах.' }),
       seg,
-      h('div', { class: 'form' }, login, pass, mode === 'up' ? nm : null, err, go)
+      h('div', { class: 'form' }, login, pass, mode === 'up' ? nm : null, err, go),
+      h('p', { class: 'cap legal-cap' }, 'Продолжая, ты принимаешь ', h('a', { href: 'terms.html', text: 'Условия' }), ' и ', h('a', { href: 'privacy.html', text: 'Политику конфиденциальности' }), '.')
     ], true);
   }
   /* ---------- смена имени и пароля ---------- */
@@ -2071,6 +2073,7 @@
       h('p', { class: 'glabel', text: 'Язык' }),
       h('div', { class: 'group' }, grow2('Язык интерфейса', 'gear', window.I18N ? I18N.langs[I18N.get()] : 'Русский', function () { openUiLang(openGeneral); }), grow2('Язык ответов', 'chat', (langOf(S.settings.lang) ? langOf(S.settings.lang)[1] : 'Как в сообщении'), function () { openLangPicker(openGeneral); })),
       h('p', { class: 'cap', text: 'На каком языке ИИ отвечает. По умолчанию он отвечает на том языке, на котором ты пишешь.' }),
+      legalLinks(),
       h('p', { class: 'foot', text: 'DDX AI ' + VERSION, raw: 1 })
     ], true);
   }
@@ -2139,6 +2142,7 @@
         grow2('Сохранить копию чатов', 'download', '', exportAll),
         grow2('Загрузить копию', 'share', '', function () { importInput.click(); })),
       h('div', { class: 'group solo' }, del),
+      legalLinks(),
       h('p', { class: 'foot center', text: 'DDX AI ' + VERSION, raw: 1 })
     ], true);
   }
