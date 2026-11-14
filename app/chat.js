@@ -64,6 +64,7 @@
     share: '<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M6 12.5v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5"/>',
     stop: '<rect x="7" y="7" width="10" height="10" rx="2.4" fill="currentColor"/>',
     mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/>',
+    wave: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>',
     up: '<path d="M6 14.5l6-6 6 6"/>',
     back: '<path d="M14.5 6l-6 6 6 6"/>', fwd: '<path d="M9.5 6l6 6-6 6"/>', download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>', upload: '<path d="M12 16V5M7 9.5l5-5 5 5M5 19.5h14"/>',
     file: '<path d="M7 3.5h6.5L18 8v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z"/><path d="M13.5 3.5V8H18"/>',
@@ -2728,6 +2729,141 @@
         tm = setTimeout(finish, 40000);
       }, function () { toast('Нет доступа к микрофону: разреши его в настройках'); });
     });
+  })();
+
+  /* голосовой режим: говоришь, ИИ отвечает вслух, потом снова слушает */
+  (function voiceMode() {
+    var btn = $('#vmode'), SR = window.SpeechRecognition || window.webkitSpeechRecognition, ss = window.speechSynthesis;
+    var standalone = (navigator.standalone === true) || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    var useSR = !!SR && !(ios && standalone);
+    var canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder && (window.AudioContext || window.webkitAudioContext));
+    if (!btn || !ss || !window.SpeechSynthesisUtterance || (!useSR && !canRec)) return;
+    btn.hidden = false; btn.append(icon('wave'));
+    var on = false, state = '', ui = null, rec = null, stream = null, actx = null, vadRaf = 0, mr = null, wait = 0, fails = 0, token = 0;
+    var lang = function () { var l = S.settings.lang; return l === 'en' ? 'en' : l === 'kk' ? 'kk' : 'ru'; };
+    var cap = function (t, dim) { if (!ui) return; ui.cap.textContent = t || ''; ui.cap.classList.toggle('dim', !!dim); };
+    var setState = function (st, label) { state = st; if (!ui) return; ui.root.setAttribute('data-st', st); ui.lab.textContent = label; };
+    function build() {
+      var orb = h('button', { class: 'vm-orb', type: 'button', 'aria-label': 'нажми, чтобы перебить' }, h('i'), h('i'), h('i'));
+      var lab = h('p', { class: 'vm-lab' }), capEl = h('p', { class: 'vm-cap' });
+      var end = h('button', { class: 'vm-end', type: 'button', 'aria-label': 'завершить' }, icon('close'), h('span', { text: 'Завершить' }));
+      var root = h('div', { class: 'vmode', role: 'dialog', 'aria-label': 'голосовой режим' }, h('div', { class: 'vm-top' }, logo('logo'), h('span', { text: 'DDX AI' })), orb, lab, capEl, end);
+      orb.addEventListener('click', function () { if (state === 'speak') { ss.cancel(); listen(); } else if (state === 'listen') { /* уже слушаю */ } });
+      end.addEventListener('click', stop);
+      document.body.append(root);
+      return { root: root, lab: lab, cap: capEl };
+    }
+    function start() {
+      if (on) return;
+      if (busy) { toast('Дождись ответа'); return; }
+      on = true; fails = 0; ui = build(); requestAnimationFrame(function () { ui.root.classList.add('in'); });
+      document.body.classList.add('lock');
+      try { var u0 = new SpeechSynthesisUtterance(' '); u0.volume = 0; ss.speak(u0); } catch (e) { /* разблокировка озвучки */ }
+      if (!useSR) {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) { if (!on) { st.getTracks().forEach(function (t) { t.stop(); }); return; } stream = st; listen(); }, function () { toast('Нет доступа к микрофону: разреши его в настройках'); stop(); });
+      } else listen();
+    }
+    function stop() {
+      if (!on) return; on = false; token++;
+      ss.cancel(); if (wait) { clearInterval(wait); wait = 0; }
+      if (rec) { var r = rec; rec = null; r.onend = null; try { r.abort(); } catch (e) { /* уже остановлен */ } }
+      if (vadRaf) { cancelAnimationFrame(vadRaf); vadRaf = 0; }
+      if (mr && mr.state !== 'inactive') { mr.onstop = null; try { mr.stop(); } catch (e2) { /* уже остановлен */ } } mr = null;
+      if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+      if (actx) { try { actx.close(); } catch (e3) { /* закрыт */ } actx = null; }
+      document.body.classList.remove('lock');
+      if (ui) { var r2 = ui.root; ui = null; r2.classList.remove('in'); setTimeout(function () { r2.remove(); }, 300); }
+      state = '';
+    }
+    function heard(text) {
+      if (!on) return;
+      text = String(text || '').trim();
+      if (!text) { listen(); return; }
+      cap(text, false); setState('think', 'Думаю');
+      var chatId = (curChat() || {}).id, before = chatId ? (curChat().msgs || []).length : 0, myTok = ++token;
+      send(text);
+      if (!busy) { fails++; if (fails >= 2) { toast('Голосовой режим остановлен'); stop(); } else setTimeout(function () { if (on && myTok === token) listen(); }, 900); return; }
+      fails = 0;
+      wait = setInterval(function () {
+        if (!on || myTok !== token) { clearInterval(wait); wait = 0; return; }
+        if (busy) return;
+        clearInterval(wait); wait = 0;
+        var c = curChat(), last = c && c.msgs.length > before ? c.msgs[c.msgs.length - 1] : null;
+        if (last && last.role === 'assistant' && last.text) say(last.text); else listen();
+      }, 200);
+    }
+    function say(text) {
+      var t = speechPlain(text); if (!t) { listen(); return; }
+      var cyr = (t.match(/[а-яёәіңғүұқөһ]/gi) || []).length > t.length * 0.25, lg = cyr ? ((S.settings.lang === 'kk') ? 'kk-KZ' : 'ru-RU') : 'en-US';
+      var parts = t.match(/[^.!?…]+[.!?…]*\s*/g) || [t], chunks = [], cur = '';
+      parts.forEach(function (p) { if ((cur + p).length > 180 && cur) { chunks.push(cur); cur = ''; } cur += p; }); if (cur) chunks.push(cur);
+      var myTok = token; setState('speak', 'Говорю'); cap(t.length > 160 ? t.slice(0, 157) + '…' : t, true);
+      ss.cancel();
+      chunks.forEach(function (ch, i) {
+        var u = new SpeechSynthesisUtterance(ch); u.lang = lg; u.rate = 1;
+        if (i === chunks.length - 1) u.onend = u.onerror = function () { if (on && myTok === token && state === 'speak') setTimeout(function () { if (on && myTok === token) listen(); }, 250); };
+        ss.speak(u);
+      });
+    }
+    function listen() {
+      if (!on) return;
+      token++; var myTok = token;
+      setState('listen', 'Слушаю'); cap('', true);
+      if (useSR) {
+        var got = '', done = false;
+        rec = new SR(); rec.lang = { ru: 'ru-RU', en: 'en-US', kk: 'kk-KZ' }[lang()]; rec.interimResults = true; rec.continuous = false;
+        rec.onresult = function (e) { var txt = '', k; for (k = 0; k < e.results.length; k++) txt += e.results[k][0].transcript; got = txt; cap(txt, true); };
+        rec.onerror = function (e) { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Нет доступа к микрофону: разреши его в настройках'); stop(); } };
+        rec.onend = function () {
+          rec = null; if (!on || myTok !== token || done) return; done = true;
+          if (got.trim()) heard(got); else setTimeout(function () { if (on && myTok === token) listen(); }, 300);
+        };
+        try { rec.start(); } catch (e2) { rec = null; toast('Голосовой режим недоступен'); stop(); }
+        return;
+      }
+      listenVad(myTok);
+    }
+    // без распознавания в браузере: слушаем уровень звука, пишем фразу и отправляем на сервер
+    function listenVad(myTok) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!actx) { actx = new AC(); var src = actx.createMediaStreamSource(stream); var an = actx.createAnalyser(); an.fftSize = 1024; src.connect(an); actx.an = an; }
+      if (actx.state === 'suspended') actx.resume();
+      var an2 = actx.an, buf = new Uint8Array(an2.fftSize), chunks = [], talking = false, lastVoice = 0, t0 = Date.now(), tStart = 0;
+      var mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].filter(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); })[0] || '';
+      var tick = function () {
+        if (!on || myTok !== token) return;
+        an2.getByteTimeDomainData(buf); var sum = 0, i; for (i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
+        var rms = Math.sqrt(sum / buf.length), now = Date.now();
+        if (rms > 0.035) {
+          lastVoice = now;
+          if (!talking) { talking = true; tStart = now; chunks = []; mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); }; mr.start(); }
+        }
+        if (talking && (now - lastVoice > 1300 || now - tStart > 30000)) { finishRec(); return; }
+        if (!talking && now - t0 > 25000) { vadRaf = 0; listen(); return; }
+        vadRaf = requestAnimationFrame(tick);
+      };
+      var finishRec = function () {
+        vadRaf = 0; var m = mr; mr = null; if (!m) return;
+        m.onstop = function () {
+          if (!on || myTok !== token) return;
+          var blob = new Blob(chunks, { type: m.mimeType || mime || 'audio/mp4' });
+          if (blob.size < 1500) { listen(); return; }
+          setState('think', 'Думаю');
+          var fr = new FileReader();
+          fr.onload = function () {
+            fetch(API, { method: 'POST', headers: authHdr(), body: JSON.stringify({ mode: 'stt', audio: String(fr.result), lang: lang(), device: device }) })
+              .then(function (r) { return r.json().catch(function () { return {}; }); })
+              .then(function (j) { if (!on || myTok !== token) return; if (j && typeof j.text === 'string' && j.text.trim()) heard(j.text); else if (j && j.error === 'mode') { toast('В воркере нет распознавания речи'); stop(); } else listen(); }, function () { if (on) { toast('Нет связи с воркером'); stop(); } });
+          };
+          fr.readAsDataURL(blob);
+        };
+        try { m.stop(); } catch (e) { listen(); }
+      };
+      vadRaf = requestAnimationFrame(tick);
+    }
+    btn.addEventListener('click', function () { on ? stop() : start(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && on) stop(); });
   })();
   $('#pick').addEventListener('click', openPlus);
   $('#file').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
