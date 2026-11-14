@@ -20,7 +20,7 @@ function cors(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -694,6 +694,20 @@ export default {
     }
     if (path.indexOf('/ai/') === 0) {
       try { return await aiRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'ai', detail: String(e.message || e).slice(0, 200) }, origin); }
+    }
+    if (path === '/admin/users' && req.method === 'GET') {
+      try {
+        if (!env.ADMIN_KEY || !env.DB) return reply(503, { error: 'off', detail: 'в воркере не задан ADMIN_KEY или нет базы DB' }, origin);
+        const aip = req.headers.get('CF-Connecting-IP') || 'x';
+        if (!(await hit(env, 'adm:' + aip + ':' + new Date().toISOString().slice(0, 13), 15, 3600))) return reply(429, { error: 'rate' }, origin);
+        const given = String(req.headers.get('X-Admin-Key') || ''), want = String(env.ADMIN_KEY);
+        let diff = given.length ^ want.length;
+        for (let i = 0; i < want.length; i++) diff |= (given.charCodeAt(i) || 0) ^ want.charCodeAt(i);
+        if (diff !== 0) return reply(401, { error: 'auth' }, origin);
+        await dbInit(env);
+        const rows = await env.DB.prepare('SELECT u.id, u.login, u.name, u.pro_until, u.created, (SELECT MAX(last) FROM sessions s WHERE s.user_id = u.id) AS last, (SELECT updated FROM data d WHERE d.user_id = u.id) AS synced FROM users u ORDER BY u.created DESC LIMIT 1000').all();
+        return reply(200, { total: (rows.results || []).length, users: rows.results || [] }, origin);
+      } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
     if (path.indexOf('/auth/') === 0 || path.indexOf('/data/') === 0 || path.indexOf('/pro/') === 0) {
       try { return await authRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }

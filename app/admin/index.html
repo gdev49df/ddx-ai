@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>DDX AI · пользователи</title>
+<script src="../theme.js"></script>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { overflow: auto; }
+  .adm { max-width: 860px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 24px) 16px 40px; }
+  .adm h1 { font-size: 22px; margin: 0 0 4px; }
+  .adm .cap { margin: 0 0 16px; }
+  .akey { display: flex; gap: 8px; margin-bottom: 16px; }
+  .akey .field { flex: 1; min-width: 0; }
+  .atbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .atbl th { text-align: left; font-weight: 600; color: var(--mute); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .atbl td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .atbl tr:hover td { background: rgb(var(--w) / .04); }
+  .pro { display: inline-block; padding: 2px 8px; border-radius: 99px; background: rgb(var(--w) / .12); font-size: 12px; }
+  .wrap { overflow-x: auto; }
+  .err { color: var(--err); margin: 8px 0; }
+</style>
+</head>
+<body>
+<main class="adm">
+  <h1>Пользователи</h1>
+  <p class="cap" id="sum">введи ключ администратора</p>
+  <form class="akey" id="f"><input class="field" id="k" type="password" placeholder="ключ" autocomplete="off"><button class="btn" type="submit">показать</button></form>
+  <p class="err" id="err" hidden></p>
+  <div class="wrap"><table class="atbl" id="t" hidden><thead><tr><th>#</th><th>логин</th><th>имя</th><th>тариф</th><th>регистрация</th><th>был в сети</th></tr></thead><tbody></tbody></table></div>
+</main>
+<script>
+(function () {
+  var API = 'https://ddx-ai.wsmp.workers.dev/';
+  var $ = function (s) { return document.querySelector(s); };
+  var fmt = function (t) { return t ? new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; };
+  function load(key) {
+    $('#err').hidden = true;
+    fetch(API + 'admin/users', { headers: { 'X-Admin-Key': key } }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+      if (!x.ok) { $('#err').textContent = x.d.error === 'auth' ? 'неверный ключ' : (x.d.detail || x.d.error || 'ошибка'); $('#err').hidden = false; $('#t').hidden = true; return; }
+      try { sessionStorage.setItem('ddx_adm', key); } catch (e) {}
+      var tb = $('#t tbody'); tb.replaceChildren();
+      x.d.users.forEach(function (u) {
+        var tr = document.createElement('tr'), now = Date.now();
+        [u.id, u.login, u.name || '—', u.pro_until > now ? 'Pro до ' + new Date(u.pro_until).toLocaleDateString('ru-RU') : 'Free', fmt(u.created), fmt(u.last)].forEach(function (v, i) {
+          var td = document.createElement('td'); td.textContent = v; tr.append(td);
+        });
+        tb.append(tr);
+      });
+      $('#t').hidden = false; $('#sum').textContent = 'всего: ' + x.d.total; $('#f').hidden = true;
+    }).catch(function () { $('#err').textContent = 'нет связи'; $('#err').hidden = false; });
+  }
+  $('#f').addEventListener('submit', function (e) { e.preventDefault(); var k = $('#k').value.trim(); if (k) load(k); });
+  var saved = ''; try { saved = sessionStorage.getItem('ddx_adm') || ''; } catch (e) {}
+  if (saved) load(saved);
+})();
+</script>
+</body>
+</html>
