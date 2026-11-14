@@ -29,6 +29,7 @@
   <p class="cap" id="sum">введи ключ администратора</p>
   <form class="akey" id="f"><input class="field" id="k" type="password" placeholder="ключ" autocomplete="off"><button class="btn" type="submit">показать</button></form>
   <p class="err" id="err" hidden></p>
+  <p><button class="btn" id="rst" type="button" hidden>Сбросить лимиты всем</button> <span class="cap" id="rmsg"></span></p>
   <div class="wrap"><table class="atbl" id="t" hidden><thead><tr><th>#</th><th>логин</th><th>имя</th><th>тариф</th><th>регистрация</th><th>был в сети</th></tr></thead><tbody></tbody></table></div>
 </main>
 <script>
@@ -49,10 +50,18 @@
         });
         tb.append(tr);
       });
-      $('#t').hidden = false; $('#sum').textContent = 'всего: ' + x.d.total; $('#f').hidden = true;
+      $('#t').hidden = false; $('#rst').hidden = false; $('#sum').textContent = 'всего: ' + x.d.total; $('#f').hidden = true;
     }).catch(function () { $('#err').textContent = 'нет связи'; $('#err').hidden = false; });
   }
   $('#f').addEventListener('submit', function (e) { e.preventDefault(); var k = $('#k').value.trim(); if (k) load(k); });
+  var armed = 0;
+  $('#rst').addEventListener('click', function () {
+    var key = ''; try { key = sessionStorage.getItem('ddx_adm') || ''; } catch (e) {}
+    if (!armed) { armed = 1; this.textContent = 'Точно сбросить? нажми ещё раз'; var b = this; setTimeout(function () { armed = 0; b.textContent = 'Сбросить лимиты всем'; }, 4000); return; }
+    armed = 0; this.textContent = 'Сбросить лимиты всем';
+    fetch(API + 'admin/reset-limits', { method: 'POST', headers: { 'X-Admin-Key': key, 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); }).then(function (d) { $('#rmsg').textContent = d.ok ? 'готово: лимиты сброшены ' + new Date(d.at).toLocaleTimeString('ru-RU') : (d.detail || d.error || 'ошибка'); }, function () { $('#rmsg').textContent = 'нет связи'; });
+  });
   var saved = ''; try { saved = sessionStorage.getItem('ddx_adm') || ''; } catch (e) {}
   if (saved) load(saved);
 })();

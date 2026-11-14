@@ -278,6 +278,9 @@ const GLOBAL_DAY = 1500;   // общий предохранитель на вс�
 
 const dayKey = (env) => new Date(Date.now() + Number(env.TZ_OFFSET || 5) * 3600000).toISOString().slice(0, 10);
 const num = (v) => Math.max(0, parseInt(v, 10) || 0);
+// «сброс лимитов»: время последнего сброса в KV; всё, что учтено раньше, не считается
+const rstMs = async (env) => (env.KV ? num(await env.KV.get('rst')) : 0);
+const rstTag = (ms) => (ms ? '.' + ms.toString(36) : '');
 
 async function sha256hex(s) {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)))).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -307,7 +310,7 @@ async function takeQuotaDevice(env, body, kind) {
   if (!env.KV) return { info: null, refund: async () => {} };
   const device = String(body.device || '');
   if (!/^[A-Za-z0-9-]{16,64}$/.test(device)) return { status: 400, payload: { error: 'device' } };
-  const day = dayKey(env);
+  const day = dayKey(env) + rstTag(await rstMs(env));
   const pro = await isProDevice(env, body, device);
   const cap = (pro === 'life' ? LIFE_Q : pro ? PRO_Q : FREE_Q);
   const qk = 'q:' + device + ':' + day, gk = 'g:' + day;
@@ -563,7 +566,7 @@ async function takeQuota(env, user, kind) {
   const life = (user.pro_until || 0) - now > LIFE_MS;
   const pro = (user.pro_until || 0) > now;
   const cap = life ? LIFE_Q : pro ? PRO_Q : FREE_Q;
-  const day = dayKey(env);
+  const day = dayKey(env) + rstTag(await rstMs(env));
   const qk = 'q:u' + user.id + ':' + day, gk = 'g:' + day;
   let q = { ask: 0, food: 0 };
   try { q = Object.assign(q, JSON.parse(await env.KV.get(qk))); } catch (e) { /* первый запрос за день */ }
@@ -709,6 +712,18 @@ export default {
         return reply(200, { total: (rows.results || []).length, users: rows.results || [] }, origin);
       } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
+    if (path === '/admin/reset-limits' && req.method === 'POST') {
+      try {
+        if (!env.ADMIN_KEY || !env.KV) return reply(503, { error: 'off', detail: 'в воркере не задан ADMIN_KEY или нет KV' }, origin);
+        const given2 = String(req.headers.get('X-Admin-Key') || ''), want2 = String(env.ADMIN_KEY);
+        let diff2 = given2.length ^ want2.length;
+        for (let i = 0; i < want2.length; i++) diff2 |= (given2.charCodeAt(i) || 0) ^ want2.charCodeAt(i);
+        if (diff2 !== 0) return reply(401, { error: 'auth' }, origin);
+        const now2 = Date.now();
+        await env.KV.put('rst', String(now2));
+        return reply(200, { ok: true, at: now2 }, origin);
+      } catch (e) { return reply(502, { error: 'kv', detail: String(e.message || e).slice(0, 200) }, origin); }
+    }
     if (path.indexOf('/auth/') === 0 || path.indexOf('/data/') === 0 || path.indexOf('/pro/') === 0) {
       try { return await authRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
@@ -764,7 +779,7 @@ export default {
         if (!am) return reply(400, { error: 'audio' }, origin);
         const sdev = String(body.device || '');
         if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(sdev)) return reply(400, { error: 'device' }, origin);
-        if (!(await hit(env, 'stt:' + (user ? 'u' + user.id : sdev) + ':' + dayKey(env), Number(env.STT_LIMIT || 80), 172800))) return reply(429, { error: 'limit', detail: 'на сегодня голосовой ввод исчерпан' }, origin);
+        if (!(await hit(env, 'stt:' + (user ? 'u' + user.id : sdev) + ':' + dayKey(env) + rstTag(await rstMs(env)), Number(env.STT_LIMIT || 80), 172800))) return reply(429, { error: 'limit', detail: 'на сегодня голосовой ввод исчерпан' }, origin);
         const bin = atob(am[2]); const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const ext = ({ mp4: 'mp4', webm: 'webm', ogg: 'ogg', wav: 'wav', mpeg: 'mp3' })[am[1].toLowerCase()] || 'mp4';
@@ -787,7 +802,7 @@ export default {
         if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(tdev)) return reply(400, { error: 'device' }, origin);
         if (env.KV) {
           // защита бесплатных кредитов: общий потолок на месяц и лимит символов на человека в день
-          const mk = 'tts:m:' + new Date().toISOString().slice(0, 7), dk = 'tts:d:' + (user ? 'u' + user.id : tdev) + ':' + dayKey(env);
+          const mk = 'tts:m:' + new Date().toISOString().slice(0, 7), dk = 'tts:d:' + (user ? 'u' + user.id : tdev) + ':' + dayKey(env) + rstTag(await rstMs(env));
           const used = num(await env.KV.get(mk)), mine = num(await env.KV.get(dk));
           if (used + ttext.length > Number(env.TTS_MONTH_CAP || 8000)) return reply(429, { error: 'cap', detail: 'нейроголос на этот месяц исчерпан' }, origin);
           if (mine + ttext.length > Number(env.TTS_DAY_CHARS || 2500)) return reply(429, { error: 'limit', detail: 'на сегодня нейроголос исчерпан' }, origin);
@@ -810,7 +825,7 @@ export default {
         const WIN_MS = 43200000;
         const device = String(body.device || '');
         if (env.KV && !/^[A-Za-z0-9-]{16,64}$/.test(device)) return reply(400, { error: 'device' }, origin);
-        const day = dayKey(env);
+        const rstAt = await rstMs(env), day = dayKey(env) + rstTag(rstAt);
         // код подписки: в KV лежит ключ  sub:КОД  со значением {"plan":"pro","period":"month","exp":1893456000000}
         // period: month или year, exp: когда подписка заканчивается (мс, можно не указывать)
         let code = AI_SUB_CODE(body.code);
@@ -837,7 +852,7 @@ export default {
         let stamps = [];
         if (usedKey) { try { stamps = JSON.parse(await env.KV.get(usedKey) || '[]'); } catch (e1) { stamps = []; } }
         const nowMs = Date.now();
-        stamps = (Array.isArray(stamps) ? stamps : []).filter((t) => t > nowMs - WIN_MS).sort((a, b) => a - b);
+        stamps = (Array.isArray(stamps) ? stamps : []).filter((t) => t > Math.max(nowMs - WIN_MS, rstAt)).sort((a, b) => a - b);
         const used = stamps.length;
         // reset: когда освободится ближайший слот, full: когда лимит восстановится полностью
         const slotAt = (arr, lim) => (arr.length >= lim ? arr[arr.length - lim] + WIN_MS : 0);
