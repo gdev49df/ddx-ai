@@ -1385,3 +1385,7 @@ html.kbopen .toast { bottom: calc(var(--kb, 0px) + var(--cph, 72px) + 16px); }
 .app.tab-p #more, .app.tab-p #newchat { display: none !important; }
 @media (min-width: 900px) { .tabs { display: none; } :root { --tabh: 0px; } .pview { max-width: var(--cw, 760px); } body .app .composer { padding-bottom: 24px; } }
 .app .bar::after, .app .bar::before { display: none; }
+
+/* прежнее лого в шапке: «личный помощник» над крупным DDX AI (шрифт Unbounded), по центру */
+.app .bar h1.is-brand { font-size: 23px; letter-spacing: .02em; font-weight: 700; padding-top: 3px; }
+.app .bar .brand:has(h1.is-brand) .label { display: block; font-size: 10.5px; letter-spacing: .14em; opacity: .8; }
