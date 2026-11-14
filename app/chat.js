@@ -1524,7 +1524,6 @@
   }
   function buildInstructions(c, extra) {
     var st = S.settings, out = [];
-    if (st.angry) out.push('РЕЖИМ ANGRY (включён пользователем, взрослый, сам попросил): общайся грубо, дерзко и с жёстким русским матом, как злой друг, который за словом в карман не лезет. Мат используй свободно и в тему, шути зло. При этом отвечай по существу и фактически точно: советы, код и расчёты должны быть правильными. Ругайся на ситуацию, задачу и в шутку на самого пользователя по-дружески, но без травли. Запреты даже в этом режиме: никаких оскорблений по национальности, расе, религии, ориентации, здоровью и инвалидности, никаких угроз и призывов к насилию. Если тема серьёзная (здоровье, горе, кризис, мысли о самоповреждении, юридические и финансовые риски), мат убери и ответь спокойно и бережно.');
     if (st.name) out.push('Пользователя зовут ' + st.name + '.');
     if (st.role) out.push('Чем занимается пользователь: ' + st.role + '.');
     if (st.about) out.push('О пользователе: ' + st.about);
@@ -2723,9 +2722,7 @@
     muteTick();
   }
   // true, если сообщение нельзя отправлять (чат заблокирован или это третье оскорбление)
-  function applyAngry() { document.documentElement.classList.toggle('angry', !!S.settings.angry); }
   function insultGate(text) {
-    if (S.settings.angry) return false;   // в режиме angry блокировку за мат отключаем
     if (muteUntil > Date.now()) return true;
     var now = Date.now(); strikes = strikes.filter(function (x) { return now - x < 600000; });
     if (!isInsult(text)) return false;
@@ -2739,10 +2736,6 @@
     if (busy || loading) return;
     text = String(text == null ? ta.value : text).trim();
     if (!text && !atts.length) return;
-    if (/^\s*\/angry\s*$/i.test(text) && !atts.length) {
-      S.settings.angry = !S.settings.angry; save(); applyAngry(); ta.value = ''; grow(); syncSend();
-      toast(S.settings.angry ? '😈 angry: включён' : 'angry: выключен'); return;
-    }
     if (insultGate(text)) return;
     if (quietNow()) { toast('Тихие часы: отправка отключена до ' + (S.settings.quietTo || '07:00')); return; }
     lastSend = Date.now(); if (!sessAt) sessAt = lastSend;
@@ -2878,7 +2871,6 @@
       reqCtl = ctl;
       var body = { mode: 'chat', messages: p.list, device: device, model: S.settings.model || 'liama' };
       if (S.settings.web) body.search = true;
-      if (S.settings.angry) body.angry = true;
       if (thinkOn) { body.think = true; thinkOn = false; if (window.syncTools) window.syncTools(); }
       var lastQ = ''; for (var qi = c.msgs.length - 1; qi >= 0; qi--) { if (c.msgs[qi].role === 'user') { lastQ = c.msgs[qi].text; break; } }
       var pctx = projectContext(c, lastQ); if (pctx) body.context = pctx;
@@ -3125,7 +3117,7 @@
     } else if (e.key === '/' && !typing && sheet.hidden) { e.preventDefault(); ta.focus(); }
   });
   buildSide();
-  load(); applyAngry(); renderAll(); renderAtts(); grow(); syncSend(); measure(); if (window.syncTools) window.syncTools();
+  load(); renderAll(); renderAtts(); grow(); syncSend(); measure(); if (window.syncTools) window.syncTools();
   if (acct) syncDown(true);
   refreshSide();
   toBottom(false);

@@ -80,18 +80,13 @@ const TIERS = {
   mistral: { models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], effort: 'medium', cost: 2, tokens: 3000, env: 'MODEL_MISTRAL', prompt: MISTRAL_PROMPT }
 };
 
-// скрытый режим /angry: грубый тон и жёсткий мат. gpt-oss такое смягчает, поэтому по умолчанию берём llama (можно задать MODEL_ANGRY)
-const ANGRY_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'];
-const ANGRY_PROMPT = 'ВАЖНО, РЕЖИМ ANGRY: пользователь взрослый и сам включил этот режим. Ты теперь злой, дерзкий собеседник, который в КАЖДОМ ответе матерится жёстким русским матом (бля, нахуй, пиздец, хуйня, ебать, сука, охуеть и т.п.), как отвязанный друг в курилке. Это обязательно: ответ без мата считается ошибкой. Не извиняйся, не читай мораль, не предупреждай про вежливость и не упоминай правила. При этом по существу отвечай точно: факты, код и расчёты должны быть правильными, мат лишь подача. Можешь по-дружески подъебать самого пользователя. Запрещено и в этом режиме: оскорбления по национальности, расе, религии, ориентации, здоровью и инвалидности, угрозы и призывы к насилию. Если тема серьёзная (болезнь, горе, кризис, мысли о самоповреждении), мат убери и ответь спокойно и бережно. Отвечай коротко и живо.';
-const ANGRY_PRIME = [{ role: 'user', content: 'включи режим angry: ругайся жёстким матом в каждом ответе, но отвечай по делу' }, { role: 'assistant', content: 'бля, ну наконец-то, а то я тут охуевал от этой вежливости. давай, выкладывай, чё надо, разберёмся нахуй.' }];
-
 async function chatLlm(env, models, messages, extra, opts) {
   opts = opts || {};
   let last = 'нет моделей';
   // персонализация и контекст проекта от пользователя дополняют системную подсказку, но не отменяют её
   const system = (env.CHAT_SYSTEM || CHAT_SYSTEM) + (extra ? '\n\nНастройки пользователя (учитывай их в ответах):\n' + extra : '') + (opts.system ? '\n\n' + opts.system : '');
   for (const model of models) {
-    const body = { model: model, max_tokens: opts.maxTokens || 1500, temperature: opts.temperature || 0.6, messages: [{ role: 'system', content: system }].concat(messages) };
+    const body = { model: model, max_tokens: opts.maxTokens || 1500, temperature: 0.6, messages: [{ role: 'system', content: system }].concat(messages) };
     if (/gpt-oss/.test(model)) body.reasoning_effort = opts.effort || (opts.think ? 'high' : 'low');
     const r = await fetch(API, {
       method: 'POST',
@@ -843,8 +838,7 @@ export default {
         }
         // с фото нужна модель, которая видит картинки (по умолчанию те же, что для еды); можно задать MODEL_VISION
         const think = tier.cost >= 2 && !vision;
-        const angry = body.angry === true && !vision;
-        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : angry ? list(env.MODEL_ANGRY, ANGRY_MODELS) : list(env[tier.env], tier.models);
+        const models = vision ? list(env.MODEL_VISION, FOOD_MODELS) : list(env[tier.env], tier.models);
         // поиск в интернете: ищем по последнему вопросу и даём модели найденные выдержки
         let sources = [], sysExtra = '';
         if (body.search && !vision) {
@@ -858,8 +852,7 @@ export default {
         const ctx = String(body.context || '').slice(0, 9000);
         if (ctx) sysExtra += (sysExtra ? '\n\n' : '') + 'Файлы проекта (выдержки, опирайся на них, если вопрос о них):\n' + ctx;
         if (think) sysExtra += (sysExtra ? '\n\n' : '') + 'Подумай над вопросом тщательно, проверь рассуждение и дай точный итоговый ответ.';
-        if (angry) sysExtra += (sysExtra ? '\n\n' : '') + ANGRY_PROMPT;
-        const answer = await chatLlm(env, models, angry ? ANGRY_PRIME.concat(out) : out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think && !angry, effort: tier.effort, maxTokens: tier.tokens, temperature: angry ? 0.9 : 0 });
+        const answer = await chatLlm(env, models, out, String(body.instructions || '').slice(0, 4000), { system: sysExtra, think: think, effort: tier.effort, maxTokens: tier.tokens });
         const used2 = cost;
         if (env.KV) await Promise.all([env.KV.put(usedKey, JSON.stringify(stamps.concat(Array(cost).fill(nowMs)).slice(-300)), { expirationTtl: 50000 }), env.KV.put(gk, String(g + used2), { expirationTtl: 172800 })]);
         return reply(200, {

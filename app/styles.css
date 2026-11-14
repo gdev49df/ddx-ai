@@ -1436,7 +1436,3 @@ html.tg body .app .bar { padding-top: calc(max(env(safe-area-inset-top, 0px), va
 /* строка чата не дёргается при открытии/закрытии клавиатуры и смене чата: отступы меняются плавно */
 html body .app .composer { transition: padding-bottom .24s cubic-bezier(.2, .8, .2, 1); }
 html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding-bottom: 8px !important; }
-
-/* скрытый режим /angry: красноватый акцент у строки чата */
-html.angry .composer .card:focus-within, html.angry .composer .card { border-color: rgba(255, 90, 70, .38); }
-html.angry .composer .card:focus-within { box-shadow: 0 18px 50px rgb(0 0 0 / .42), 0 0 0 4px rgba(255, 90, 70, .1), 0 0 38px rgba(255, 90, 70, .16); }
