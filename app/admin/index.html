@@ -30,6 +30,7 @@
   <form class="akey" id="f"><input class="field" id="k" type="password" placeholder="ключ" autocomplete="off"><button class="btn" type="submit">показать</button></form>
   <p class="err" id="err" hidden></p>
   <p><button class="btn" id="rst" type="button" hidden>Сбросить лимиты всем</button> <span class="cap" id="rmsg"></span></p>
+  <p><button class="btn" id="tt" type="button" hidden>Проверить голос Microsoft</button> <span class="cap" id="tmsg"></span></p>
   <div class="wrap"><table class="atbl" id="t" hidden><thead><tr><th>#</th><th>логин</th><th>имя</th><th>тариф</th><th>регистрация</th><th>был в сети</th></tr></thead><tbody></tbody></table></div>
 </main>
 <script>
@@ -50,10 +51,15 @@
         });
         tb.append(tr);
       });
-      $('#t').hidden = false; $('#rst').hidden = false; $('#sum').textContent = 'всего: ' + x.d.total; $('#f').hidden = true;
+      $('#t').hidden = false; $('#rst').hidden = false; $('#tt').hidden = false; $('#sum').textContent = 'всего: ' + x.d.total; $('#f').hidden = true;
     }).catch(function () { $('#err').textContent = 'нет связи'; $('#err').hidden = false; });
   }
   $('#f').addEventListener('submit', function (e) { e.preventDefault(); var k = $('#k').value.trim(); if (k) load(k); });
+  $('#tt').addEventListener('click', function () {
+    var key = ''; try { key = sessionStorage.getItem('ddx_adm') || ''; } catch (e) {}
+    $('#tmsg').textContent = 'проверяю…';
+    fetch(API + 'admin/tts-test', { headers: { 'X-Admin-Key': key } }).then(function (r) { return r.json(); }).then(function (d) { $('#tmsg').textContent = d.ok ? 'работает, получено ' + d.bytes + ' байт аудио' : 'не работает: ' + (d.error || d.detail || 'ошибка'); }, function () { $('#tmsg').textContent = 'нет связи'; });
+  });
   var armed = 0;
   $('#rst').addEventListener('click', function () {
     var key = ''; try { key = sessionStorage.getItem('ddx_adm') || ''; } catch (e) {}

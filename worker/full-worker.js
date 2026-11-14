@@ -408,6 +408,59 @@ async function hit(env, key, max, ttl) {
   return true;
 }
 
+
+// голоса Microsoft Edge (neural): неофициальный канал, работает через исходящий websocket
+const EDGE_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+const EDGE_VOICES = { ru: 'ru-RU-SvetlanaNeural', kk: 'kk-KZ-AigulNeural', en: 'en-US-AriaNeural' };
+async function edgeGec() {
+  let ticks = Math.floor(Date.now() / 1000) + 11644473600;
+  ticks -= ticks % 300;
+  const raw = String(ticks) + '0000000' + EDGE_TOKEN;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+const xmlAttr = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+async function edgeTtsOnce(text, voice, ver) {
+  const rid = crypto.randomUUID().replace(/-/g, '');
+  const url = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=' + EDGE_TOKEN + '&ConnectionId=' + rid + '&Sec-MS-GEC=' + (await edgeGec()) + '&Sec-MS-GEC-Version=1-' + ver;
+  const major = ver.split('.')[0];
+  const resp = await fetch(url, { headers: {
+    'Upgrade': 'websocket', 'Pragma': 'no-cache', 'Cache-Control': 'no-cache',
+    'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + major + '.0.0.0 Safari/537.36 Edg/' + major + '.0.0.0',
+    'Accept-Language': 'en-US,en;q=0.9', 'Cookie': 'muid=' + crypto.randomUUID().replace(/-/g, '').toUpperCase() + ';'
+  } });
+  const ws = resp.webSocket;
+  if (!ws) throw new Error('edge ' + resp.status);
+  ws.accept();
+  return await new Promise((resolve, reject) => {
+    const parts = []; let total = 0, done = false;
+    const finish = (err) => { if (done) return; done = true; clearTimeout(tm); try { ws.close(1000, 'ok'); } catch (e) { /* уже закрыт */ } if (err) reject(err); else { const out = new Uint8Array(total); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } total ? resolve(out) : reject(new Error('edge empty')); } };
+    const tm = setTimeout(() => finish(new Error('edge timeout')), 15000);
+    ws.addEventListener('message', (ev) => {
+      const d = ev.data;
+      if (typeof d === 'string') { if (d.indexOf('Path:turn.end') >= 0) finish(); return; }
+      const u8 = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer || d);
+      if (u8.length < 2) return;
+      const hl = (u8[0] << 8) | u8[1];
+      const head = new TextDecoder().decode(u8.slice(2, 2 + hl));
+      if (head.indexOf('Path:audio') >= 0) { const body = u8.slice(2 + hl); if (body.length) { parts.push(body); total += body.length; } }
+    });
+    ws.addEventListener('error', () => finish(new Error('edge ws error')));
+    ws.addEventListener('close', () => finish());
+    const ts = new Date().toUTCString().replace('GMT', 'GMT+0000 (Coordinated Universal Time)');
+    ws.send('X-Timestamp:' + ts + '\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}\r\n');
+    ws.send('X-RequestId:' + rid + '\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:' + ts + 'Z\r\nPath:ssml\r\n\r\n<speak version=\'1.0\' xmlns=\'http://www.w3.org/2001/10/synthesis\' xml:lang=\'en-US\'><voice name=\'' + voice + '\'><prosody pitch=\'+0Hz\' rate=\'+0%\' volume=\'+0%\'>' + xmlAttr(text) + '</prosody></voice></speak>');
+  });
+}
+async function edgeTts(env, text, lang) {
+  const voice = (lang === 'ru' ? env.EDGE_VOICE_RU : lang === 'kk' ? env.EDGE_VOICE_KK : env.EDGE_VOICE_EN) || EDGE_VOICES[lang] || EDGE_VOICES.en;
+  const vers = [env.EDGE_CHROMIUM, '143.0.3650.75', '130.0.2849.68'].filter(Boolean);
+  let last = null;
+  for (const v of vers) { try { return await edgeTtsOnce(text, voice, v); } catch (e) { last = e; } }
+  throw last || new Error('edge');
+}
+
 async function authRoute(req, env, path, origin) {
   if (!env.DB) return reply(503, { error: 'no db', detail: 'в воркере не привязана база D1 (переменная DB)' }, origin);
   await dbInit(env);
@@ -724,6 +777,15 @@ export default {
         return reply(200, { ok: true, at: now2 }, origin);
       } catch (e) { return reply(502, { error: 'kv', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
+    if (path === '/admin/tts-test' && req.method === 'GET') {
+      if (!env.ADMIN_KEY) return reply(503, { error: 'off' }, origin);
+      const g3 = String(req.headers.get('X-Admin-Key') || ''), w3 = String(env.ADMIN_KEY);
+      let d3 = g3.length ^ w3.length;
+      for (let i = 0; i < w3.length; i++) d3 |= (g3.charCodeAt(i) || 0) ^ w3.charCodeAt(i);
+      if (d3 !== 0) return reply(401, { error: 'auth' }, origin);
+      try { const buf = await edgeTts(env, 'Привет! Это проверка голоса.', 'ru'); return reply(200, { ok: true, bytes: buf.length }, origin); }
+      catch (e) { return reply(200, { ok: false, error: String(e.message || e).slice(0, 200) }, origin); }
+    }
     if (path.indexOf('/auth/') === 0 || path.indexOf('/data/') === 0 || path.indexOf('/pro/') === 0) {
       try { return await authRoute(req, env, path, origin); } catch (e) { return reply(502, { error: 'db', detail: String(e.message || e).slice(0, 200) }, origin); }
     }
@@ -795,14 +857,28 @@ export default {
       }
 
       if (body.mode === 'tts') {
-        if (!env.ELEVEN_KEY) return reply(503, { error: 'off', detail: 'в воркере нет секрета ELEVEN_KEY' }, origin);
         const ttext = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 400);
         if (!ttext) return reply(400, { error: 'text' }, origin);
+        const tlang = /^(ru|en|kk)$/.test(String(body.lang || '')) ? String(body.lang) : 'ru';
         const tdev = String(body.device || '');
         if (env.KV && !user && !/^[A-Za-z0-9-]{16,64}$/.test(tdev)) return reply(400, { error: 'device' }, origin);
+        const who = user ? 'u' + user.id : tdev, rtag = rstTag(await rstMs(env)), audioRes = (buf) => new Response(buf, { status: 200, headers: Object.assign({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' }, cors(origin)) });
+        // 1) голоса Microsoft: бесплатно, свой дневной лимит символов
+        if (String(env.TTS_EDGE || '1') !== '0') {
+          const ek = 'tts:e:' + who + ':' + dayKey(env) + rtag, emax = Number(env.TTS_EDGE_DAY_CHARS || 20000);
+          const eu = env.KV ? num(await env.KV.get(ek)) : 0;
+          if (eu + ttext.length <= emax) {
+            try {
+              const buf = await edgeTts(env, ttext, tlang);
+              if (env.KV) await env.KV.put(ek, String(eu + ttext.length), { expirationTtl: 172800 });
+              return audioRes(buf);
+            } catch (e) { /* пробуем следующий источник */ }
+          }
+        }
+        // 2) ElevenLabs: защита бесплатных кредитов
+        if (!env.ELEVEN_KEY) return reply(503, { error: 'off', detail: 'нейроголос недоступен' }, origin);
         if (env.KV) {
-          // защита бесплатных кредитов: общий потолок на месяц и лимит символов на человека в день
-          const mk = 'tts:m:' + new Date().toISOString().slice(0, 7), dk = 'tts:d:' + (user ? 'u' + user.id : tdev) + ':' + dayKey(env) + rstTag(await rstMs(env));
+          const mk = 'tts:m:' + new Date().toISOString().slice(0, 7), dk = 'tts:d:' + who + ':' + dayKey(env) + rtag;
           const used = num(await env.KV.get(mk)), mine = num(await env.KV.get(dk));
           if (used + ttext.length > Number(env.TTS_MONTH_CAP || 8000)) return reply(429, { error: 'cap', detail: 'нейроголос на этот месяц исчерпан' }, origin);
           if (mine + ttext.length > Number(env.TTS_DAY_CHARS || 2500)) return reply(429, { error: 'limit', detail: 'на сегодня нейроголос исчерпан' }, origin);
