@@ -676,7 +676,7 @@
     if (busy && busyChat && busyChat === S.cur) setThinking(true, true);
     showHero(); showLeft(); showSugg();
   }
-  function legalLinks() { return h('p', { class: 'foot legal' }, h('a', { href: 'terms.html', text: 'Условия использования' }), ' · ', h('a', { href: 'privacy.html', text: 'Конфиденциальность' })); }
+  function legalLinks() { return h('p', { class: 'foot legal' }, h('a', { href: 'terms/', text: 'Условия использования' }), ' · ', h('a', { href: 'privacy/', text: 'Конфиденциальность' })); }
   var scroller = $('#view');
   function toBottom(smooth) { scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); }
 
@@ -1800,7 +1800,7 @@
       h('p', { class: 'cap', text: 'С аккаунтом чаты, память, Skills и тариф доступны на всех твоих устройствах.' }),
       seg,
       h('div', { class: 'form' }, login, pass, mode === 'up' ? nm : null, err, go),
-      h('p', { class: 'cap legal-cap' }, 'Продолжая, ты принимаешь ', h('a', { href: 'terms.html', text: 'Условия' }), ' и ', h('a', { href: 'privacy.html', text: 'Политику конфиденциальности' }), '.')
+      h('p', { class: 'cap legal-cap' }, 'Продолжая, ты принимаешь ', h('a', { href: 'terms/', text: 'Условия' }), ' и ', h('a', { href: 'privacy/', text: 'Политику конфиденциальности' }), '.')
     ], true);
   }
   /* ---------- смена имени и пароля ---------- */

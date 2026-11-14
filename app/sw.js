@@ -1,5 +1,5 @@
 // при изменении файлов меняй версию, чтобы кэш обновился
-const CACHE = 'wchat-v104';
+const CACHE = 'wchat-v105';
 const FILES = [
   './',
   './index.html',
@@ -8,8 +8,8 @@ const FILES = [
   './chat.js',
   './i18n.js',
   './legal.css',
-  './terms.html',
-  './privacy.html',
+  './terms/index.html',
+  './privacy/index.html',
   './manifest.json',
   './fonts/inter-cyrillic.woff2',
   './fonts/inter-latin.woff2',
