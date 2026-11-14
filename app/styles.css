@@ -1464,3 +1464,5 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 #dirbar span { line-height: 1; padding-bottom: 1px; }
 #dirbar svg.i { color: var(--mute); }
 #dirbar .sk-x { width: 24px; height: 24px; background: rgb(var(--w) / .1); }
+/* плашка папки вписана в угол карточки: одинаковый отступ сверху и слева, радиус 16 = 28 − 12 */
+.app .composer .card > #dirbar { margin: 4px 0 2px 0; border-radius: 16px; min-height: 32px; max-width: calc(100% - 4px); }
