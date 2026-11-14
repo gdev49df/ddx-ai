@@ -1396,3 +1396,6 @@ html.kbopen .toast { bottom: calc(var(--kb, 0px) + var(--cph, 72px) + 16px); }
 body .app .composer, body.typing .app .composer { padding-bottom: calc(env(safe-area-inset-bottom) + 8px); }
 html.kbopen body .app .composer { padding-bottom: 8px; }
 @media (min-width: 900px) { body .app .composer { padding-bottom: 24px; } }
+
+/* в Safari (не установлено на экран) поле ввода стоит вплотную над адресной строкой: нижний отступ не нужен */
+html:not(.standalone) body .app .composer, html:not(.standalone) body.typing .app .composer { padding-bottom: 6px; }

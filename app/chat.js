@@ -2963,6 +2963,7 @@
     var typingNow = !!ae && (/^(input|textarea)$/i.test(ae.tagName || '') || ae.isContentEditable);
     var standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
     var hh, yy = 0, kbh = 0;
+    rootEl.classList.toggle('standalone', !!standalone);
     if (typingNow && vp) {
       // клавиатура открыта: оболочка занимает видимую область над ней
       hh = vp.height; yy = vp.offsetTop; kbh = Math.max(0, Math.round(window.innerHeight - vp.height - vp.offsetTop));
