@@ -5,53 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Чат — DDX AI</title>
   <meta name="theme-color" content="#08080a">
+  <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex">
   <link rel="icon" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="../legal.css">
+  <script src="../theme.js"></script>
+  <link rel="stylesheet" href="../styles.css">
   <style>
-    .m { margin: 14px 0; max-width: 100%; }
-    .m.u { margin-left: auto; width: fit-content; max-width: 86%; padding: 10px 16px; border-radius: 22px 22px 6px 22px; background: rgb(var(--w) / .09); white-space: pre-wrap; overflow-wrap: anywhere; }
-    .m.a { line-height: 1.65; overflow-wrap: anywhere; }
-    .m.a p { margin: 0 0 .7em; }
-    .m.a pre { overflow-x: auto; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); font: 13px/1.5 ui-monospace, Menlo, monospace; }
-    .m.a code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; padding: 1px 6px; border-radius: 6px; background: rgb(var(--w) / .08); }
-    .m.a pre code { padding: 0; background: none; }
-    .cta { display: block; text-align: center; margin: 32px 0 0; padding: 14px; border-radius: 16px; background: var(--ink); color: var(--bg); font-weight: 700; text-decoration: none; }
-    .state { text-align: center; color: var(--mute); padding: 60px 0; }
+    html, body { height: auto; overflow: auto; }
+    body { min-height: 100dvh; display: block; }
+    .vw { max-width: var(--cw, 760px); margin: 0 auto; padding: 0 16px calc(env(safe-area-inset-bottom) + 120px); }
+    .vw-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; background: linear-gradient(180deg, var(--bg) 70%, transparent); }
+    .vw-bar .logo { width: 22px; height: 22px; }
+    .vw-bar h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; min-width: 0; max-width: 52vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .vw .msg.me { align-self: flex-end; width: fit-content; max-width: 86%; }
+    .vw-tag { white-space: nowrap; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 3px 9px; border-radius: 99px; background: rgb(var(--w) / .08); color: var(--mute); }
+    .vw .chat { padding: 8px 0 0; display: flex; flex-direction: column; gap: 14px; }
+    .vw-end { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); background: linear-gradient(0deg, var(--bg) 62%, transparent); }
+    .vw-end a { display: block; max-width: 420px; margin: 0 auto; text-align: center; padding: 15px; border-radius: 18px; background: var(--ink); color: var(--bg); font-weight: 700; text-decoration: none; box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
+    .vw-st { text-align: center; color: var(--mute); padding: 70px 0; }
   </style>
-  <script>(function(){try{var m=localStorage.getItem("wchat-theme")||"dark";if(m==="auto")m=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.setAttribute("data-theme",m)}catch(e){}})()</script>
 </head>
 <body>
-<header class="bar"><div class="bar-in"><span class="brand">DDX AI</span><span class="brand" style="opacity:.6">общий чат</span></div></header>
-<main class="wrap">
-  <div class="hero"><h1 id="t">Чат</h1></div>
-  <div id="c"><p class="state">загружаю…</p></div>
-  <a class="cta" href="../">Открыть DDX AI</a>
-</main>
+<div class="vw">
+  <header class="vw-bar"><span id="lg"></span><h1 id="t">Чат</h1><span class="vw-tag">только просмотр</span></header>
+  <div class="chat" id="chat" role="log"><p class="vw-st">загружаю…</p></div>
+</div>
+<div class="vw-end"><a href="../">Открыть DDX AI</a></div>
+<script src="md.js"></script>
 <script>
 (function () {
-  var API = 'https://ddx-ai.wsmp.workers.dev/', id = (location.hash || '').replace(/^#/, '') || new URLSearchParams(location.search).get('id') || '';
-  var box = document.getElementById('c');
-  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function md(t) {
-    var parts = String(t).split(/```/), out = '';
-    parts.forEach(function (p, i) {
-      if (i % 2) { out += '<pre><code>' + esc(p.replace(/^[^\n]*\n/, '')) + '</code></pre>'; return; }
-      p = esc(p).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-      p.split(/\n{2,}/).forEach(function (para) { if (para.trim()) out += '<p>' + para.replace(/\n/g, '<br>') + '</p>'; });
-    });
-    return out;
-  }
-  if (!id) { box.innerHTML = '<p class="state">ссылка неполная</p>'; return; }
+  var API = 'https://ddx-ai.wsmp.workers.dev/', V = window.DDXView, h = V.h;
+  var id = (location.hash || '').replace(/^#/, '') || new URLSearchParams(location.search).get('id') || '', box = document.getElementById('chat');
+  document.getElementById('lg').append(V.logo('logo'));
+  function fail(t) { box.replaceChildren(h('p', { class: 'vw-st', text: t })); }
+  if (!id) { fail('ссылка неполная'); return; }
   fetch(API + 'share/get?id=' + encodeURIComponent(id)).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (j) {
     document.getElementById('t').textContent = j.title || 'Чат'; document.title = (j.title || 'Чат') + ' — DDX AI';
-    box.innerHTML = '';
+    box.replaceChildren();
     j.msgs.forEach(function (m) {
-      var d = document.createElement('div'); d.className = 'm ' + m.r;
-      if (m.r === 'u') d.textContent = m.t; else d.innerHTML = md(m.t);
-      box.appendChild(d);
+      if (m.r === 'u') box.append(h('div', { class: 'msg me' }, h('p', { text: m.t, raw: 1 })));
+      else box.append(h('div', { class: 'msg ai' }, V.mdBlock(m.t)));
     });
-  }).catch(function () { box.innerHTML = '<p class="state">чат не найден или ссылка устарела</p>'; });
+  }).catch(function () { fail('чат не найден или ссылка устарела'); });
 })();
 </script>
 </body>
