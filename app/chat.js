@@ -559,6 +559,32 @@
     return String(t).replace(/```[\s\S]*?```/g, ' код пропущен. ').replace(/`([^`]*)`/g, '$1').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/^\s*#{1,6}\s*/gm, '').replace(/^\s*[-*•]\s+/gm, '').replace(/^\s*\|?[-:| ]{3,}\|?\s*$/gm, '').replace(/[*_~|>]/g, ' ').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
   }
+  /* выбор самого естественного голоса из установленных */
+  var voiceCache = {};
+  function pickVoice(lg) {
+    if (voiceCache[lg]) return voiceCache[lg];
+    var ss = window.speechSynthesis, list = ss && ss.getVoices ? ss.getVoices() : [];
+    if (!list.length) return null;
+    var base = lg.slice(0, 2).toLowerCase(), best = null, bestScore = -1;
+    list.forEach(function (v) {
+      var l = String(v.lang || '').replace('_', '-').toLowerCase();
+      if (l.slice(0, 2) !== base) return;
+      var n = v.name || '', sc = 1;
+      if (l === lg.toLowerCase()) sc += 8;
+      if (/natural|neural|online/i.test(n)) sc += 50;
+      if (/premium|enhanced|улучшен/i.test(n)) sc += 40;
+      if (/google/i.test(n)) sc += 30;
+      if (/siri/i.test(n)) sc += 20;
+      if (/milena|svetlana|dmitry|aigul|daulet|katya|alena|yuri|samantha|ava|zoe|jenny|aria|guy/i.test(n)) sc += 15;
+      if (!v.localService) sc += 10;
+      if (/compact|espeak/i.test(n)) sc -= 30;
+      if (sc > bestScore) { bestScore = sc; best = v; }
+    });
+    if (best) voiceCache[lg] = best;
+    return best;
+  }
+  if (window.speechSynthesis && window.speechSynthesis.addEventListener) window.speechSynthesis.addEventListener('voiceschanged', function () { voiceCache = {}; });
+  function applyVoice(u, lg) { u.lang = lg; var v = pickVoice(lg); if (v) { u.voice = v; u.lang = v.lang || lg; } u.rate = 1; u.pitch = 1; }
   function speak(text, b) {
     var ss = window.speechSynthesis;
     if (!ss || !window.SpeechSynthesisUtterance) { toast('Озвучка недоступна в этом браузере'); return; }
@@ -571,7 +597,7 @@
     parts.forEach(function (s) { if ((cur + s).length > 180 && cur) { chunks.push(cur); cur = ''; } cur += s; }); if (cur) chunks.push(cur);
     speakBtn = b; b.classList.add('on');
     chunks.forEach(function (ch, i) {
-      var u = new SpeechSynthesisUtterance(ch); u.lang = lang; u.rate = 1;
+      var u = new SpeechSynthesisUtterance(ch); applyVoice(u, lang);
       if (i === chunks.length - 1) { u.onend = u.onerror = function () { if (speakBtn === b) { b.classList.remove('on'); speakBtn = null; } }; }
       ss.speak(u);
     });
@@ -2801,7 +2827,7 @@
       var myTok = token; setState('speak', 'Говорю'); cap(t.length > 160 ? t.slice(0, 157) + '…' : t, true);
       ss.cancel();
       chunks.forEach(function (ch, i) {
-        var u = new SpeechSynthesisUtterance(ch); u.lang = lg; u.rate = 1;
+        var u = new SpeechSynthesisUtterance(ch); applyVoice(u, lg);
         if (i === chunks.length - 1) u.onend = u.onerror = function () { if (on && myTok === token && state === 'speak') setTimeout(function () { if (on && myTok === token) listen(); }, 250); };
         ss.speak(u);
       });
