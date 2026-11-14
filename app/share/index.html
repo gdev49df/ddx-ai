@@ -14,20 +14,20 @@
     html, body { height: auto; overflow: auto; }
     body { min-height: 100dvh; display: block; }
     .vw { max-width: var(--cw, 760px); margin: 0 auto; padding: 0 16px calc(env(safe-area-inset-bottom) + 120px); }
-    .vw-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; background: linear-gradient(180deg, var(--bg) 70%, transparent); }
+    .vw-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; background: color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent); mask-image: linear-gradient(#000 calc(100% - 12px), transparent); padding-bottom: 20px; }
     .vw-bar .logo { width: 22px; height: 22px; }
     .vw-bar h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; min-width: 0; max-width: 52vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .vw .msg.me { align-self: flex-end; width: fit-content; max-width: 86%; }
     .vw-tag { white-space: nowrap; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 3px 9px; border-radius: 99px; background: rgb(var(--w) / .08); color: var(--mute); }
     .vw .chat { padding: 8px 0 0; display: flex; flex-direction: column; gap: 14px; }
-    .vw-end { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); background: linear-gradient(0deg, var(--bg) 62%, transparent); }
-    .vw-end a { display: block; max-width: 420px; margin: 0 auto; text-align: center; padding: 15px; border-radius: 18px; background: var(--ink); color: var(--bg); font-weight: 700; text-decoration: none; box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
+    .vw-end { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); background: none; pointer-events: none; }
+    .vw-end a { pointer-events: auto; display: block; max-width: 420px; margin: 0 auto; text-align: center; padding: 15px; border-radius: 18px; background: var(--ink); color: var(--bg); font-weight: 700; text-decoration: none; box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
     .vw-st { text-align: center; color: var(--mute); padding: 70px 0; }
   </style>
 </head>
 <body>
+<header class="vw-bar"><span id="lg"></span><h1 id="t">Чат</h1><span class="vw-tag">только просмотр</span></header>
 <div class="vw">
-  <header class="vw-bar"><span id="lg"></span><h1 id="t">Чат</h1><span class="vw-tag">только просмотр</span></header>
   <div class="chat" id="chat" role="log"><p class="vw-st">загружаю…</p></div>
 </div>
 <div class="vw-end"><a href="../">Открыть DDX AI</a></div>
