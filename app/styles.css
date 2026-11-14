@@ -1522,3 +1522,39 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
 .msg.ai .pics.gen { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 4px; }
 .msg.ai .pics.gen.one { grid-template-columns: 1fr; max-width: 420px; }
 .msg.ai .pics.gen img { width: 100%; display: block; border-radius: 14px; cursor: zoom-in; background: var(--soft, #1b1b1b); }
+
+.math { font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", "Times New Roman", serif; font-size: 1.08em; white-space: nowrap; }
+.math i { font-style: italic; }
+.math .mo { margin: 0 .2em; }
+.math .mf { font-style: normal; margin-right: .08em; }
+.math .mt { font-family: inherit; font-style: normal; white-space: pre; }
+.math .mb { font-weight: 700; }
+.math .mfr { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 .15em; line-height: 1.25; }
+.math .mfn { padding: 0 .25em; border-bottom: 1px solid currentColor; }
+.math .mfd { padding: 0 .25em; }
+.math .msq { display: inline-flex; align-items: stretch; }
+.math .mrd { font-size: 1.1em; line-height: 1; margin-right: -.04em; }
+.math .mbar { border-top: 1px solid currentColor; padding: 0 .15em; margin-top: .12em; }
+.math .mrt { font-size: .6em; align-self: flex-start; margin-right: -.2em; }
+.math .mov { display: inline-block; border-top: 1px solid currentColor; }
+.math .mop { font-size: 1.45em; line-height: 1; vertical-align: -.1em; }
+.math sup, .math sub { font-size: .7em; line-height: 0; }
+.math .msc { display: inline-flex; align-items: center; }
+.math .mss { display: inline-flex; flex-direction: column; font-size: .75em; line-height: 1; margin-left: .1em; }
+.math .mss sup, .math .mss sub { font-size: 1em; }
+.math.d { display: block; text-align: center; margin: .7em 0; overflow-x: auto; font-size: 1.2em; padding: 2px 0; }
+.math .mss { margin-right: .2em; gap: .15em; }
+.math .mss sup, .math .mss sub { display: block; }
+.math .mrd { transform: scaleY(1.12); transform-origin: bottom; margin-right: -.02em; }
+.math .mfn .msq, .math .mfd .msq { margin: .1em 0; }
+.math .mss sup, .math .mss sub { line-height: 1.15; }
+.math .msq { align-items: flex-start; }
+.math .mrd { transform: none; line-height: 1.1; font-size: 1.15em; margin-top: -.02em; }
+.math .mbar { margin-top: .06em; line-height: 1.1; padding-top: .04em; }
+.math .mfn .msq { align-items: flex-start; }
+.math .msq { align-items: stretch; }
+.math .mrd { display: inline-block; width: .62em; font-size: 0; line-height: 0; margin: .08em -.02em 0 .04em; transform: none; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 20' preserveAspectRatio='none'%3E%3Cpath d='M0 12 L2 10.5 L5 18 L9.6 0.6' fill='none' stroke='black' stroke-width='1.4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 20' preserveAspectRatio='none'%3E%3Cpath d='M0 12 L2 10.5 L5 18 L9.6 0.6' fill='none' stroke='black' stroke-width='1.4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+.math .mbar { margin-top: .08em; }
+.math .mrd { font-size: 1em; line-height: 1; overflow: hidden; white-space: nowrap; text-indent: 200%; }

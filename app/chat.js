@@ -213,8 +213,83 @@
       return tex(body);
     });
   }
+  // настоящая вёрстка формул: дроби столбиком, корни, степени, индексы (без внешних библиотек)
+  var MFN = { sin: 1, cos: 1, tan: 1, cot: 1, log: 1, ln: 1, lg: 1, lim: 1, max: 1, min: 1, arcsin: 1, arccos: 1, arctan: 1, sinh: 1, cosh: 1, tanh: 1, exp: 1, det: 1, deg: 1 };
+  var MOP = { sum: 1, prod: 1, int: 1 };
+  function texEl(src, disp) {
+    var s = String(src).replace(/\\(?:left|right|big|Big|bigg|Bigg)\b\s*/g, '').replace(/\\[,;:!]|\\quad|\\qquad|\\ /g, ' '), p = 0, guard = 0;
+    function mk(tag, cls, kids) { var e = document.createElement(tag); if (cls) e.className = cls; (kids || []).forEach(function (k) { if (k != null) e.append(k); }); return e; }
+    function ws() { while (p < s.length && /\s/.test(s[p])) p++; }
+    function raw() { ws(); if (s[p] !== '{') return s[p++] || ''; var d = 0, o = ''; p++; while (p < s.length) { var c = s[p++]; if (c === '{') d++; else if (c === '}') { if (!d) break; d--; } o += c; } return o; }
+    function arg() { ws(); if (s[p] === '{') { p++; return seq('}'); } var a = atom(); return a ? [a] : []; }
+    function ch(c) {
+      if (/[A-Za-z]/.test(c)) return mk('i', '', [c]);
+      if (/[=<>+\-−×·±∓≤≥≠≈→←⇒⇔↔∈∉⊂∪∩∧∨]/.test(c)) return mk('span', 'mo', [c === '-' ? '−' : c]);
+      return document.createTextNode(c);
+    }
+    function cmd(n) {
+      var a, b, k;
+      if (n === 'frac' || n === 'dfrac' || n === 'tfrac') { a = arg(); b = arg(); return mk('span', 'mfr', [mk('span', 'mfn', a), mk('span', 'mfd', b)]); }
+      if (n === 'sqrt') { var idx = ''; ws(); if (s[p] === '[') { var e = s.indexOf(']', p); if (e > 0) { idx = s.slice(p + 1, e); p = e + 1; } } a = arg(); return mk('span', 'msq', [idx ? mk('sup', 'mrt', [idx]) : null, mk('span', 'mrd', ['√']), mk('span', 'mbar', a)]); }
+      if (/^(text|textbf|textit|mathrm|mathbf|mathit|operatorname|mathbb|boldsymbol|mbox)$/.test(n)) { return mk('span', /^(textbf|mathbf|boldsymbol)$/.test(n) ? 'mt mb' : 'mt', [raw()]); }
+      if (n === 'overline' || n === 'bar') return mk('span', 'mov', arg());
+      if (n === 'vec' || n === 'hat' || n === 'tilde' || n === 'dot') { a = arg(); k = mk('span', 'mg', a); var t = k.textContent; if (t.length === 1 && a.length === 1) return mk('span', 'mg', [t + (n === 'vec' ? '⃗' : n === 'hat' ? '̂' : n === 'tilde' ? '̃' : '̇')]); return mk('span', 'mov', a); }
+      if (n === 'begin' || n === 'end') { raw(); return null; }
+      if (MOP[n]) return mk('span', 'mop', [SYM[n]]);
+      if (MFN[n]) return mk('span', 'mf', [n === 'deg' ? '°' : n]);
+      if (Object.prototype.hasOwnProperty.call(SYM, n)) return ch(SYM[n]);
+      return mk('span', 'mf', [n]);
+    }
+    function atom() {
+      if (p >= s.length) return null;
+      var c = s[p];
+      if (c === '{') { p++; return mk('span', 'mg', seq('}')); }
+      if (c === '\\') {
+        p++;
+        var m = /^[A-Za-z]+/.exec(s.slice(p));
+        if (m) { p += m[0].length; return cmd(m[0]); }
+        c = s[p++] || '';
+        return c === '\\' ? document.createTextNode(' ') : document.createTextNode(c);
+      }
+      p++; return ch(c);
+    }
+    function item() {
+      ws(); if (p >= s.length) return null;
+      if (s[p] === '}') { p++; return null; }
+      var base = (s[p] === '^' || s[p] === '_') ? mk('span', '', []) : atom(), sup = null, sub = null;
+      for (;;) {
+        ws();
+        if (s[p] === '^' && !sup) { p++; sup = arg(); } else if (s[p] === '_' && !sub) { p++; sub = arg(); } else break;
+      }
+      if (!sup && !sub) return base;
+      var big = base && base.className === 'mop';
+      if (sup && sub) return mk('span', 'msc', [base, mk('span', 'mss', [mk('sup', '', sup), mk('sub', '', sub)])]);
+      return mk('span', big ? 'msc' : 'mg', [base, mk(sup ? 'sup' : 'sub', '', sup || sub)]);
+    }
+    function seq(end) {
+      var out = [];
+      while (p < s.length && s[p] !== end && guard++ < 4000) { var n = item(); if (n) out.push(n); }
+      if (end && s[p] === end) p++;
+      return out;
+    }
+    try { var root = mk('span', 'math' + (disp ? ' d' : ''), seq('')); return root; }
+    catch (e) { return document.createTextNode(tex(src)); }
+  }
+  var MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^$\n]+?)\$/g;
   function mdInline(text, into) {
-    text = mathText(text);
+    var last = 0, m;
+    MATH_RE.lastIndex = 0;
+    while ((m = MATH_RE.exec(text))) {
+      var a = m[1], b = m[2], c = m[3], d = m[4], body = a != null ? a : b != null ? b : c != null ? c : d;
+      if (d != null && (!/[\\^_=]/.test(body) || /^\s|\s$/.test(body))) continue;   // не формула, а доллары в тексте
+      if (m.index > last) mdRich(text.slice(last, m.index), into);
+      into.append(texEl(body, a != null || b != null));
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) mdRich(text.slice(last), into);
+    return into;
+  }
+  function mdRich(text, into) {
     text.split(/(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\s][^*\n]*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<)]+)/).forEach(function (part) {
       if (!part) return;
       var m;
@@ -328,6 +403,13 @@
         while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i]); i++; }
         i++; list = null;
         root.append(codeBlock(code.join('\n'), lang));
+        continue;
+      }
+      if (/^(\$\$|\\\[)/.test(line) && !/^(\$\$[\s\S]+\$\$|\\\[[\s\S]+\\\])\s*$/.test(line)) {
+        var mclose = /^\$\$/.test(line) ? '$$' : '\\]', mbuf = [line.replace(/^(\$\$|\\\[)/, '')]; i++; list = null;
+        while (i < lines.length && lines[i].indexOf(mclose) < 0) { mbuf.push(lines[i]); i++; }
+        if (i < lines.length) { mbuf.push(lines[i].slice(0, lines[i].indexOf(mclose))); i++; }
+        root.append(texEl(mbuf.join(' '), true));
         continue;
       }
       if (/^\|.*\|$/.test(line) && i + 1 < lines.length && /^\|?[\s:|-]+\|?$/.test(lines[i + 1].trim()) && lines[i + 1].indexOf('-') >= 0) {
