@@ -1680,7 +1680,7 @@
       };
       var replace = function () {
         if (!ls.set(KEY, JSON.stringify(d))) { toast('Не хватает памяти для восстановления'); return; }
-        load(); renderAll(); refreshSide(); closeSheet(); toast('Восстановлено: ' + S.chats.length + ' чатов');
+        load(); dirRestore(); renderAll(); refreshSide(); closeSheet(); toast('Восстановлено: ' + S.chats.length + ' чатов');
       };
       var btn = function (label, cls, fn) { var b = h('button', { class: 'btn ' + cls, type: 'button' }, h('span', { text: label })); b.addEventListener('click', fn); return b; };
       openSheet([
@@ -2413,6 +2413,7 @@
     plusPop = h('div', { class: 'popmenu up', role: 'menu' },
       item('Фото', 'image', function () { $('#file').click(); }),
       item('Файлы', 'file', function () { $('#docfile').click(); }),
+      item(dirH ? 'Сменить папку' : 'Подключить папку', 'folder', dirConnect),
       item('Добавить в проект', 'folder', pickProjectForNew),
       item('Skills', 'bolt', openSkills),
       item('Память', 'brain', openMemory));
@@ -2834,6 +2835,124 @@
     window.syncTools = function () { sync(); applyModel(); };
   })();
   // выдержки из файлов проекта, подходящие к вопросу
+  /* ---------- подключённая папка (File System Access API, только чтение; Chrome/Edge на компьютере) ---------- */
+  var DIR_OK = typeof window.showDirectoryPicker === 'function';
+  var DIR_SKIP = /^(node_modules|\.git|\.svn|dist|build|out|\.next|\.nuxt|__pycache__|venv|\.venv|env|\.idea|\.vscode|target|vendor|coverage|\.cache|\.gradle|Pods)$/i;
+  var DIR_TEXT = /(\.(txt|md|markdown|csv|tsv|json|jsonc|log|xml|html|htm|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|java|kt|go|rs|c|h|cpp|hpp|cs|php|rb|swift|sql|sh|bat|ps1|yml|yaml|toml|ini|cfg|conf|tex|srt|vue|svelte|lua|dart|gradle|properties|gitignore|env\.example)|(^|\/)(dockerfile|makefile|readme|license))$/i;
+  var DIR_DOC = /\.(docx|xlsx|pptx|pdf)$/i;
+  var dirH = null, dirFiles = [], dirAt = 0, dirBusy = null, dirCache = {}, dirNeedPerm = false;
+  function idb(fn) {
+    return new Promise(function (res, rej) {
+      var o = indexedDB.open('ddx-dir', 1);
+      o.onupgradeneeded = function () { o.result.createObjectStore('k'); };
+      o.onerror = function () { rej(o.error); };
+      o.onsuccess = function () { var st, r; try { st = o.result.transaction('k', 'readwrite').objectStore('k'); r = fn(st); } catch (e) { rej(e); return; } r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; };
+    });
+  }
+  function dirWalk(handle, prefix, depth, out) {
+    if (depth > 6 || out.length > 3000) return Promise.resolve();
+    var entries = [];
+    return (function loop(it) {
+      return it.next().then(function (r) {
+        if (r.done) return;
+        entries.push(r.value[1]); return loop(it);
+      });
+    })(handle.entries()).then(function () {
+      entries.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+      var chain = Promise.resolve();
+      entries.forEach(function (e) {
+        chain = chain.then(function () {
+          if (out.length > 3000) return;
+          if (e.kind === 'directory') { if (!DIR_SKIP.test(e.name) && e.name[0] !== '.') return dirWalk(e, prefix + e.name + '/', depth + 1, out); return; }
+          var p = prefix + e.name;
+          if (DIR_TEXT.test(p) || DIR_DOC.test(p)) out.push({ path: p, handle: e });
+        });
+      });
+      return chain;
+    });
+  }
+  function dirIndex(force) {
+    if (!dirH) return Promise.resolve();
+    if (dirBusy) return dirBusy;
+    if (!force && Date.now() - dirAt < 30000) return Promise.resolve();
+    var out = [];
+    dirBusy = dirWalk(dirH, '', 0, out).then(function () { dirFiles = out; dirAt = Date.now(); }).catch(function () {}).then(function () { dirBusy = null; showDirbar(); });
+    return dirBusy;
+  }
+  function dirRead(f) {
+    return f.handle.getFile().then(function (file) {
+      var key = f.path, hit = dirCache[key];
+      if (hit && hit.m === file.lastModified) return hit.t;
+      if (file.size > (DIR_DOC.test(f.path) ? 8e6 : 600000)) return '';
+      return (DIR_DOC.test(f.path) ? (/\.docx$/i.test(f.path) ? readDocx(file) : /\.xlsx$/i.test(f.path) ? readXlsx(file) : /\.pptx$/i.test(f.path) ? readPptx(file) : readPdf(file)) : file.text())
+        .then(function (t) { t = String(t).replace(/\u0000/g, ''); dirCache[key] = { m: file.lastModified, t: t }; return t; }, function () { return ''; });
+    }, function () { return ''; });
+  }
+  function dirConnect() {
+    if (!DIR_OK) { toast('папки подключаются только в chrome или edge на компьютере'); return; }
+    window.showDirectoryPicker({ mode: 'read' }).then(function (hd) {
+      dirH = hd; dirNeedPerm = false; dirCache = {}; dirFiles = []; dirAt = 0;
+      idb(function (st) { return st.put(hd, 'h'); }).catch(function () {});
+      toast('папка «' + hd.name + '» подключена'); dirIndex(true); showDirbar();
+    }, function () {});
+  }
+  function dirDisconnect() { dirH = null; dirFiles = []; dirCache = {}; dirNeedPerm = false; idb(function (st) { return st.delete('h'); }).catch(function () {}); showDirbar(); toast('папка отключена'); }
+  function dirRestore() {
+    if (!DIR_OK || !window.indexedDB) return;
+    idb(function (st) { return st.get('h'); }).then(function (hd) {
+      if (!hd) return; dirH = hd;
+      return hd.queryPermission({ mode: 'read' }).then(function (p) { if (p === 'granted') dirIndex(true); else dirNeedPerm = true; showDirbar(); });
+    }).catch(function () {});
+  }
+  function showDirbar() {
+    var bar = $('#dirbar'); if (!bar) return;
+    if (!dirH) { bar.hidden = true; bar.replaceChildren(); measure(); return; }
+    var x = h('button', { class: 'sk-x', type: 'button', 'aria-label': 'отключить папку' }, icon('close')); x.addEventListener('click', function (e) { e.stopPropagation(); dirDisconnect(); });
+    var lab = dirNeedPerm ? 'папка «' + dirH.name + '»: нажми, чтобы разрешить' : 'папка «' + dirH.name + '»' + (dirFiles.length ? ' · ' + dirFiles.length + ' файлов' : dirBusy ? ' · читаю…' : '');
+    bar.hidden = false; bar.replaceChildren(icon('folder'), h('span', { text: lab, raw: 1 }), x); measure();
+    bar.onclick = function () { if (!dirNeedPerm) return; dirH.requestPermission({ mode: 'read' }).then(function (p) { if (p === 'granted') { dirNeedPerm = false; dirIndex(true); } showDirbar(); }); };
+  }
+  // выдержки из файлов папки, которые подходят к вопросу: сначала по имени, потом по содержимому
+  function folderContext(q) {
+    if (!dirH || dirNeedPerm) return Promise.resolve('');
+    return dirIndex(false).then(function () {
+      if (!dirFiles.length) return '';
+      var low = String(q || '').toLowerCase().replace(/ё/g, 'е'), words = low.match(/[a-zа-я0-9_.\-]{3,}/g) || [], stems = words.map(function (w) { return w.slice(0, 5); });
+      var tree = dirFiles.slice(0, 120).map(function (f) { return f.path; }).join('\n');
+      var head = 'Подключена папка пользователя «' + dirH.name + '» (только чтение), файлов: ' + dirFiles.length + '. Список (' + Math.min(120, dirFiles.length) + ' первых):\n' + tree.slice(0, 2200);
+      var scored = dirFiles.map(function (f) {
+        var pl = f.path.toLowerCase(), base = pl.split('/').pop(), s = 0;
+        if (low.indexOf(base) >= 0) s += 10;
+        words.forEach(function (w) { if (w.length >= 3 && pl.indexOf(w) >= 0) s += 3; });
+        return { f: f, s: s };
+      });
+      var cand = scored.filter(function (x) { return x.s > 0; }).sort(function (a, b) { return b.s - a.s; }).slice(0, 4);
+      var more = scored.filter(function (x) { return !x.s && !DIR_DOC.test(x.f.path); }).slice(0, 80);
+      var pre = cand.length >= 3 ? Promise.resolve() : Promise.all(more.map(function (x) { return dirRead(x.f).then(function (t) { var tl = t.toLowerCase(); x.s = stems.reduce(function (a, s) { return a + (s.length >= 4 && tl.indexOf(s) >= 0 ? 1 : 0); }, 0) * 0.5; x.t = t; }); })).then(function () {
+        more.filter(function (x) { return x.s >= 1; }).sort(function (a, b) { return b.s - a.s; }).slice(0, 3 - cand.length).forEach(function (x) { cand.push(x); });
+      });
+      return pre.then(function () {
+        return Promise.all(cand.map(function (x) { return x.t != null ? Promise.resolve(x.t) : dirRead(x.f); })).then(function (texts) {
+          var out = [head], budget = 4300;
+          cand.forEach(function (x, i) {
+            var t = String(texts[i] || '').trim(); if (!t) return;
+            var per = Math.floor(budget / Math.max(1, cand.length - i));
+            if (t.length > per) {                       // длинный файл: берём самые подходящие куски
+              var parts = [], cur = '';
+              t.split(/\n/).forEach(function (ln) { if ((cur + ln).length > 600 && cur) { parts.push(cur); cur = ''; } cur += ln + '\n'; });
+              if (cur) parts.push(cur);
+              parts.forEach(function (p, j) { var pl = p.toLowerCase(); p = { t: p, s: stems.reduce(function (a, s) { return a + (pl.indexOf(s) >= 0 ? 1 : 0); }, 0) - j * 0.01 }; parts[j] = p; });
+              parts.sort(function (a, b) { return b.s - a.s; }); var acc = ''; parts.forEach(function (p) { if (acc.length + p.t.length <= per) acc += p.t + '…\n'; });
+              t = acc || t.slice(0, per);
+            }
+            budget -= t.length; out.push('[файл ' + x.f.path + ']\n' + t);
+          });
+          return out.join('\n\n').slice(0, 6600);
+        });
+      });
+    }).catch(function () { return ''; });
+  }
+
   function projectContext(c, q) {
     var pr = projectById(c ? c.project : null); if (!pr || !pr.files || !pr.files.length) return '';
     var words = String(q || '').toLowerCase().match(/[a-zа-яёәіңғүұқөһ0-9]{4,}/g) || [], stems = words.map(function (w) { return w.slice(0, 5); });
@@ -2876,8 +2995,11 @@
       var pctx = projectContext(c, lastQ); if (pctx) body.context = pctx;
       if (instr) body.instructions = instr;
       if (subCode) body.code = subCode;
-      return fetch(API, {
-        method: 'POST', headers: authHdr(), signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
+      return folderContext(lastQ).then(function (fctx) {
+        if (fctx) body.context = (fctx + (pctx ? '\n\n' + pctx : '')).slice(0, 8900);
+        return fetch(API, {
+          method: 'POST', headers: authHdr(), signal: ctl ? ctl.signal : undefined, body: JSON.stringify(body)
+        });
       }).then(function (r) { clearTimeout(timer); return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); },
         function (e) { clearTimeout(timer); throw e; });
     }).then(function (x) {
