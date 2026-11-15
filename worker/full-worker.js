@@ -693,6 +693,21 @@ async function authRoute(req, env, path, origin) {
     return reply(200, { pro_until: until, tier: newTier, life: until - Date.now() > LIFE_MS }, origin);
   }
 
+  // пробный период: 3 дня тарифа pro, один раз на аккаунт и не больше двух в месяц с одного адреса
+  if (path === '/pro/trial') {
+    if ((u.pro_until || 0) > Date.now()) return reply(409, { error: 'active', detail: 'подписка уже активна' }, origin);
+    const th = 'trial:' + u.id;
+    const was = await env.DB.prepare('SELECT user_id FROM codes WHERE hash = ?').bind(th).first();
+    if (was) return reply(409, { error: 'used', detail: 'пробный период уже использован' }, origin);
+    if (!(await hit(env, 'trial:' + ip, 2, 30 * 86400))) return reply(429, { error: 'rate', detail: 'с этого адреса пробный период уже брали, попробуй позже' }, origin);
+    const until = Date.now() + 3 * 86400000;
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO codes (hash, user_id, days, at) VALUES (?, ?, ?, ?)').bind(th, u.id, 3, Date.now()),
+      env.DB.prepare('UPDATE users SET pro_until = ?, tier = ? WHERE id = ?').bind(until, 'pro', u.id)
+    ]);
+    return reply(200, { pro_until: until, tier: 'pro', life: false, trial: true }, origin);
+  }
+
   return reply(404, { error: 'route' }, origin);
 }
 
