@@ -3261,8 +3261,33 @@
     });
     document.addEventListener('click', function (e) { if (mpop && !mpop.contains(e.target)) closeM(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeM(); });
-    bar.append(web, mb); sync(); applyModel();
-    window.syncTools = function () { sync(); applyModel(); };
+    // режимы: готовые роли для разных задач (инструкции лежат в воркере)
+    var PERS = [['', 'Обычный', 'Универсальный помощник'], ['law', 'Юрист', 'Право Казахстана: нормы, документы, риски'], ['student', 'Студент', 'Учёба: конспекты, планы, разбор задач, источники'], ['human', 'Хуманайзер', 'Сделает твой текст живее и естественнее', 'Хуман']];
+    var curP = function () { return PERS.filter(function (m) { return m[0] === (S.settings.persona || ''); })[0] || PERS[0]; };
+    var plab = h('span', { text: curP()[3] || curP()[1], raw: 1 }), pb = h('button', { class: 'tchip persona', type: 'button', 'aria-haspopup': 'menu' }, icon('brain'), plab), ppop = null;
+    var applyPers = function () {
+      if (S.settings.persona && !PERS.some(function (m) { return m[0] === S.settings.persona; })) delete S.settings.persona;
+      plab.textContent = curP()[3] || curP()[1]; pb.classList.toggle('on', !!S.settings.persona);
+    };
+    var closeP = function () { if (ppop) { ppop.remove(); ppop = null; } pb.classList.remove('open'); };
+    pb.addEventListener('click', function (e) {
+      e.stopPropagation(); if (ppop) { closeP(); return; } closeM();
+      ppop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, PERS.map(function (m) {
+        var on = curP()[0] === m[0];
+        var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
+        it.addEventListener('click', function () { closeP(); if (on) return; if (m[0]) S.settings.persona = m[0]; else delete S.settings.persona; save(); applyPers(); toast('Режим: ' + m[1]); });
+        return it;
+      }));
+      var r = pb.getBoundingClientRect();
+      ppop.style.bottom = (window.innerHeight - r.top + 8) + 'px'; ppop.style.left = '8px'; ppop.style.right = 'auto';
+      document.body.append(ppop); pb.classList.add('open');
+      var pw = ppop.offsetWidth, vw = document.documentElement.clientWidth || window.innerWidth;
+      ppop.style.left = Math.round(Math.min(Math.max(8, r.right - pw), vw - pw - 8)) + 'px';
+    });
+    document.addEventListener('click', function (e) { if (ppop && !ppop.contains(e.target)) closeP(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeP(); });
+    bar.append(web, mb, pb); sync(); applyModel(); applyPers();
+    window.syncTools = function () { sync(); applyModel(); applyPers(); };
   })();
   // выдержки из файлов проекта, подходящие к вопросу
   /* ---------- подключённая папка (File System Access API, только чтение; Chrome/Edge на компьютере) ---------- */
@@ -3492,6 +3517,7 @@
       reqCtl = ctl;
       var body = { mode: 'chat', messages: p.list, device: device, model: S.settings.model || 'liama' };
       if (S.settings.web) body.search = true;
+      if (S.settings.persona) body.persona = S.settings.persona;
       var imgQ = ''; for (var iq = c.msgs.length - 1; iq >= 0; iq--) { if (c.msgs[iq].role === 'user') { imgQ = c.msgs[iq].text || ''; break; } }
       if (IMG_RE.test(imgQ) && !(lastMsgHasPhoto(c))) {
         if (!/^(mistral|orion)$/.test(body.model)) { body.noImg = 1; } else { body.image = true; var ar = imgQ.match(/\b(16:9|9:16|4:3|3:4|1:1)\b/); if (ar) body.aspect = ar[1]; }

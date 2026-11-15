@@ -1558,3 +1558,11 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 20' preserveAspectRatio='none'%3E%3Cpath d='M0 12 L2 10.5 L5 18 L9.6 0.6' fill='none' stroke='black' stroke-width='1.4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
 .math .mbar { margin-top: .08em; }
 .math .mrd { font-size: 1em; line-height: 1; overflow: hidden; white-space: nowrap; text-indent: 200%; }
+.tchip.persona { margin-left: 6px; padding: 0 12px 0 10px; gap: 5px; color: var(--mute); }
+.tchip.persona svg.i { width: 14px; height: 14px; }
+.tchip.persona.open { color: var(--ink); border-color: var(--mute2); }
+.tchip.persona.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tchip.persona:not(.on) span { display: none; }
+.tchip.persona:not(.on) { padding: 0 10px; }
+.app .composer .tbar .tchip.persona { order: 3; grid-column: 3; justify-self: end; margin: 0; }
+@media (max-width: 480px) { .tchip.persona span, .tchip.persona.on span { display: none; } .tchip.persona, .tchip.persona.on { padding: 0 10px; } }
