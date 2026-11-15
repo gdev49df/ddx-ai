@@ -347,6 +347,8 @@ const weekOf = (env, now) => { const tz = Number(env.TZ_OFFSET || 5) * 3600000, 
 const creditOf = (env, now) => { const tz = Number(env.TZ_OFFSET || 5) * 3600000, c0 = FRI + 20 * 3600000, p = 14 * 86400000, idx = Math.floor((now + tz - c0) / p); return { idx: idx, until: c0 + (idx + 1) * p - tz }; };
 const FREE_Q = { ask: 10, food: 2 };
 const PRO_Q = { ask: 40, food: 15 };
+const TIER_Q = { pro: PRO_Q, max: { ask: 120, food: 40 }, ultra: { ask: 300, food: 100 } };   // планнер: лимиты ии по тарифам (код вида хэш:дни:тариф)
+const tierOk = (t) => (t === 'max' || t === 'ultra' ? t : 'pro');
 const LIFE_Q = { ask: 1000, food: 300 };   // Founder Lifetime: практически без лимитов
 // доступ к моделям, создание фото и текст orion по тарифам. [период, сколько]: d день, w неделя (сброс в пятницу 19:00)
 const MODEL_OK = { free: ['liama', 'mistral'], pro: ['liama', 'mistral'], max: ['liama', 'mistral', 'orion'], ultra: ['liama', 'mistral', 'orion'] };
@@ -417,6 +419,7 @@ async function dbInit(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, days INTEGER NOT NULL, at INTEGER NOT NULL)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)')
   ]);
+  try { await env.DB.prepare("ALTER TABLE users ADD COLUMN tier TEXT").run(); } catch (e) { /* колонка уже есть */ }
   for (const col of ['device TEXT', 'place TEXT']) {
     try { await env.DB.prepare('ALTER TABLE sessions ADD COLUMN ' + col).run(); } catch (e) { /* колонка уже есть */ }
   }
@@ -442,7 +445,7 @@ const cleanLogin = (s) => String(s || '').trim().toLowerCase();
 const LOGIN_RE = /^[a-z0-9_.]{3,24}$/;
 const LIFE_MS = 20 * 365 * 86400000;
 
-const userInfo = (u) => ({ id: u.id, login: u.login, name: u.name || '', pro_until: u.pro_until || 0, life: (u.pro_until || 0) - Date.now() > LIFE_MS });
+const userInfo = (u) => ({ id: u.id, login: u.login, name: u.name || '', pro_until: u.pro_until || 0, tier: tierOk(u.tier), life: (u.pro_until || 0) - Date.now() > LIFE_MS });
 
 // токен лежит у человека, в базе только его sha-256
 function deviceOf(req) {
@@ -470,7 +473,7 @@ async function authUser(req, env) {
   if (!m) return null;
   await dbInit(env);
   const th = await sha256hex(m[1]);
-  const row = await env.DB.prepare('SELECT u.id, u.login, u.name, u.pro_until, s.last AS last FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?').bind(th).first();
+  const row = await env.DB.prepare('SELECT u.id, u.login, u.name, u.pro_until, u.tier, s.last AS last FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?').bind(th).first();
   if (!row) return null;
   row.th = th;
   if (Date.now() - row.last > 600000) { try { await env.DB.prepare('UPDATE sessions SET last = ? WHERE token = ?').bind(Date.now(), th).run(); } catch (e) { /* не страшно */ } }
@@ -581,7 +584,7 @@ async function authRoute(req, env, path, origin) {
     const hour = new Date().toISOString().slice(0, 13);
     const fk = 'lg:' + login + ':' + hour;
     if (env.KV && num(await env.KV.get(fk)) >= 10) return reply(429, { error: 'rate', detail: 'слишком много неудачных попыток, попробуй через час' }, origin);
-    const u = await env.DB.prepare('SELECT id, login, name, salt, hash, pro_until FROM users WHERE login = ?').bind(login).first();
+    const u = await env.DB.prepare('SELECT id, login, name, salt, hash, pro_until, tier FROM users WHERE login = ?').bind(login).first();
     const ok = u ? sameHex(await hashPassword(pass, u.salt), u.hash) : (await hashPassword(pass, '00'.repeat(16)), false);
     if (!ok) {
       if (env.KV) await env.KV.put(fk, String(num(await env.KV.get(fk)) + 1), { expirationTtl: 3600 });
@@ -677,14 +680,17 @@ async function authRoute(req, env, path, origin) {
     const ent = list.map((x) => x.split(':')).find((x) => x[0] === hash);
     if (!ent) return reply(404, { error: 'code', detail: 'код не подошёл. проверь, нет ли опечатки' }, origin);
     const days = Number(ent[1]) || 31;
+    const tier = tierOk(ent[2]);
     const used = await env.DB.prepare('SELECT user_id FROM codes WHERE hash = ?').bind(hash).first();
     if (used) return reply(409, { error: 'used', detail: used.user_id === u.id ? 'этот код уже активирован на твоём аккаунте' : 'этот код уже использован' }, origin);
     const until = Math.max(Date.now(), u.pro_until || 0) + days * 86400000;
+    const RANK = { pro: 1, max: 2, ultra: 3 };
+    const newTier = (RANK[tier] || 1) >= (RANK[tierOk(u.tier)] || 1) || !(u.pro_until > Date.now()) ? tier : tierOk(u.tier);
     await env.DB.batch([
       env.DB.prepare('INSERT INTO codes (hash, user_id, days, at) VALUES (?, ?, ?, ?)').bind(hash, u.id, days, Date.now()),
-      env.DB.prepare('UPDATE users SET pro_until = ? WHERE id = ?').bind(until, u.id)
+      env.DB.prepare('UPDATE users SET pro_until = ?, tier = ? WHERE id = ?').bind(until, newTier, u.id)
     ]);
-    return reply(200, { pro_until: until, life: until - Date.now() > LIFE_MS }, origin);
+    return reply(200, { pro_until: until, tier: newTier, life: until - Date.now() > LIFE_MS }, origin);
   }
 
   return reply(404, { error: 'route' }, origin);
@@ -696,7 +702,7 @@ async function takeQuota(env, user, kind) {
   const now = Date.now();
   const life = (user.pro_until || 0) - now > LIFE_MS;
   const pro = (user.pro_until || 0) > now;
-  const cap = life ? LIFE_Q : pro ? PRO_Q : FREE_Q;
+  const cap = life ? LIFE_Q : pro ? (TIER_Q[tierOk(user.tier)] || PRO_Q) : FREE_Q;
   const day = dayKey(env) + rstTag(await rstMs(env));
   const qk = 'q:u' + user.id + ':' + day, gk = 'g:' + day;
   let q = { ask: 0, food: 0 };
