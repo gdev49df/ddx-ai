@@ -3777,7 +3777,6 @@
   toBottom(false);
 
   var splash = $('#splash');
-  $('#splash-logo').append(logo('logo big'));
   $('#hero-logo').append(logo('logo herologo'));
-  setTimeout(function () { splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 900); }, 1000);
+  setTimeout(function () { splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 900); }, 1700);
 })();

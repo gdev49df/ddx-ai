@@ -1,5 +1,5 @@
 // при изменении файлов меняй версию, чтобы кэш обновился
-const CACHE = 'wchat-v147';
+const CACHE = 'wchat-v148';
 const FILES = [
   './',
   './index.html',
@@ -17,7 +17,8 @@ const FILES = [
   './fonts/unbounded-700.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/wordmark-white.png'
 ];
 
 self.addEventListener('install', (e) => {
