@@ -629,9 +629,10 @@
       }
       var spk = ib('speaker', 'озвучить', function (b) { speak(m.text, b); });
       var shr = ib('share', 'поделиться', function () { shareText(m.text, 'ответ DDX AI'); });
+      var card = ib('image', 'картинкой', function () { shareCard(m.text); });
       var when = m.at ? (function () { var d = new Date(m.at), now = new Date(), loc = window.I18N ? I18N.locale() : 'ru-RU', tm = d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
         return d.toDateString() === now.toDateString() ? tm : d.toLocaleDateString(loc, { day: 'numeric', month: 'short' }) + ', ' + tm; })() : '';
-      el.append(h('div', { class: 'msg-actions' }, vsw, copy, up, down, again, spk, shr, when ? h('span', { class: 'mtime', text: when, raw: 1, 'data-notr': '1' }) : null));
+      el.append(h('div', { class: 'msg-actions' }, vsw, copy, up, down, again, spk, shr, card, when ? h('span', { class: 'mtime', text: when, raw: 1, 'data-notr': '1' }) : null));
       if (fresh) { el.classList.add('fresh'); streamWords(el); if (m.text.length > 700) el.classList.add('plain'); }
     }
     return el;
@@ -1414,6 +1415,41 @@
     return '# ' + c.title + '\n\n' + c.msgs.map(function (m) {
       return (m.role === 'user' ? '**я:** ' : '**DDX AI:** ') + (m.files && m.files.length ? '[файл: ' + m.files.map(function (f) { return f.name; }).join(', ') + '] ' : '') + (m.thumbs && m.thumbs.length ? '[фото] ' : '') + m.text;
     }).join('\n\n');
+  }
+  // карточка-картинка с ответом: рисуем на canvas, делимся файлом или скачиваем
+  function plainForCard(t) {
+    return String(t || '').replace(/```[a-z0-9]*\n?/gi, '').replace(/\$\$?([^$]+)\$\$?/g, '$1').replace(/\^\{?(\d)\}?/g, function (_, d) { return '⁰¹²³⁴⁵⁶⁷⁸⁹'.charAt(Number(d)); }).replace(/\\(frac|sqrt|cdot|times|le|ge|pi)\b/g, function (_, w) { return ({ frac: '', sqrt: '√', cdot: '·', times: '×', le: '≤', ge: '≥', pi: 'π' })[w]; }).replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/^#{1,6}\s*/gm, '').replace(/^>\s?/gm, '').replace(/(\*\*|__|`)/g, '').replace(/^\s*[-*]\s+/gm, '• ').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function shareCard(text) {
+    var W = 1080, P = 72, FS = 38, LH = 58, font = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif';
+    var cv = document.createElement('canvas'), cx = cv.getContext('2d');
+    var wrap = function (para) {
+      var words = para.split(/\s+/), lines = [], cur = '';
+      words.forEach(function (w) { var t = cur ? cur + ' ' + w : w; if (cx.measureText(t).width > W - P * 2 && cur) { lines.push(cur); cur = w; } else cur = t; });
+      if (cur) lines.push(cur); return lines;
+    };
+    cx.font = '400 ' + FS + 'px ' + font;
+    var lines = [], MAX = 26;
+    plainForCard(text).split('\n').forEach(function (p) { if (!p.trim()) lines.push(''); else wrap(p).forEach(function (l) { lines.push(l); }); });
+    var cut = lines.length > MAX; if (cut) { lines = lines.slice(0, MAX); lines[MAX - 1] = lines[MAX - 1].replace(/\s*\S*$/, '') + '…'; }
+    var H = P + 70 + 40 + lines.length * LH + 60 + 90;
+    cv.width = W; cv.height = H;
+    var g = cx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16161a'); g.addColorStop(1, '#0a0a0b');
+    cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+    cx.strokeStyle = 'rgba(255,255,255,.10)'; cx.lineWidth = 2; cx.beginPath(); cx.roundRect ? cx.roundRect(24, 24, W - 48, H - 48, 40) : cx.rect(24, 24, W - 48, H - 48); cx.stroke();
+    var draw = function (img) {
+      if (img) cx.drawImage(img, P, P - 6, 190, 66); else { cx.fillStyle = '#fff'; cx.font = '800 44px ' + font; cx.fillText('DDX CHAT', P, P + 44); }
+      cx.font = '400 ' + FS + 'px ' + font; cx.fillStyle = '#ececee'; cx.textBaseline = 'alphabetic';
+      lines.forEach(function (l, i) { cx.fillText(l, P, P + 70 + 40 + FS + i * LH); });
+      cx.fillStyle = 'rgba(255,255,255,.45)'; cx.font = '500 28px ' + font; cx.fillText('ответ DDX AI', P, H - 60);
+      cv.toBlob(function (blob) {
+        if (!blob) { toast('не получилось сделать картинку'); return; }
+        var file = new File([blob], 'ddx-ai-answer.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'DDX AI' }).catch(function () { /* отменили */ }); return; }
+        var url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'ddx-ai-answer.png'; document.body.append(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 30000); toast('картинка сохранена');
+      }, 'image/png');
+    };
+    var im = new Image(); im.onload = function () { draw(im); }; im.onerror = function () { draw(null); }; im.src = 'icons/wordmark-white.png';
   }
   function shareText(text, title) {
     if (navigator.share && window.matchMedia('(pointer: coarse)').matches) { navigator.share({ title: title || 'DDX AI', text: text }).catch(function () { /* отменили */ }); return; }
