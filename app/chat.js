@@ -1784,10 +1784,10 @@
   /* ---------- тарифы ---------- */
   // что даёт каждый тариф (сообщения считает воркер, остальное проверяет приложение)
   var LIMITS = {
-    free: { voice: 5, pfiles: 2, photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 15, skills: 2 },
-    pro: { voice: 30, pfiles: 5, photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 45, skills: 8 },
-    max: { voice: 100, pfiles: 10, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 },
-    ultra: { voice: 300, pfiles: 20, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 }
+    free: { voice: 3, pfiles: 2, photos: 2, files: 1, chars: 6000, projects: 2, pins: 3, memory: 15, skills: 2 },
+    pro: { voice: 15, pfiles: 5, photos: 3, files: 2, chars: 10000, projects: 10, pins: 10, memory: 45, skills: 8 },
+    max: { voice: 40, pfiles: 10, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 },
+    ultra: { voice: 100, pfiles: 20, photos: 4, files: 3, chars: 15000, projects: 1e9, pins: 1e9, memory: 90, skills: 1e9 }
   };
   function lim() { return LIMITS[sub && LIMITS[sub.plan] ? sub.plan : 'free']; }
   function planWord() { return sub ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : 'Free'; }
@@ -1798,23 +1798,26 @@
   }
   var PLANS = [
     { id: 'free', name: 'free', price: 0, line: '12 сообщений каждые 6 часов' },
-    { id: 'pro', name: 'pro', price: 1090, limit: 40 },
-    { id: 'max', name: 'max', price: 5990, limit: 120, badge: 'популярный', hot: true },
-    { id: 'ultra', name: 'ultra', price: 11990, limit: 300, badge: 'выгодно' }
+    { id: 'pro', name: 'pro', price: 1990, limit: 40 },
+    { id: 'max', name: 'max', price: 4990, limit: 120, badge: 'популярный', hot: true },
+    { id: 'ultra', name: 'ultra', price: 9990, limit: 300, badge: 'выгодно' }
   ];
   var money = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
   function featureRows(id) {
     var L = LIMITS[id], big = function (n) { return n >= 1e9; }, rows = [
       'В неделю: до ' + money(({ free: 12, pro: 40, max: 120, ultra: 300 }[id] || 12) * 10) + ' сообщений',
+      'Модели: ' + ({ free: 'Liama и Mistral (текст)', pro: 'Liama и Mistral', max: 'Liama, Mistral и Orion', ultra: 'Liama, Mistral и Orion' }[id]),
+      ({ free: 'Создание фото: нет', pro: 'Фото Mistral: 1 в день', max: 'Фото Mistral: 3 в день, Orion: 2 в неделю', ultra: 'Фото Mistral: 5 в день, Orion: 1 в день' }[id]),
+      ({ max: 'Ответов Orion: 10 в день', ultra: 'Ответов Orion: 25 в день' }[id]) || null,
       'Голосовой режим: ' + L.voice + ' ответов в день',
-      'Фото: до ' + L.photos + ' в сообщении',
+      'Фото для анализа: до ' + L.photos + ' в сообщении',
       'Файлы: до ' + L.files + ' по ' + money(L.chars) + ' символов',
       big(L.projects) ? 'Проекты без ограничений' : 'Проекты: до ' + L.projects,
       big(L.pins) ? 'Закреплённые чаты без ограничений' : 'Закреплённые чаты: до ' + L.pins,
       'Память: до ' + L.memory + ' записей',
       big(L.skills) ? 'Skills без ограничений' : 'Skills: до ' + L.skills
     ];
-    return h('div', { class: 'feat' }, rows.map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
+    return h('div', { class: 'feat' }, rows.filter(Boolean).map(function (t) { return h('p', { class: 'plan-l dim' }, icon('check'), h('span', { text: t })); }));
   }
   // цена «набегает» от нуля
   function countUp(el) {
@@ -3246,7 +3249,7 @@
       mpop = h('div', { class: 'popmenu up modelpop', role: 'menu' }, MODELS.map(function (m) {
         var on = curM()[0] === m[0];
         var it = h('button', { class: 'pi mitem' + (on ? ' on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false' }, h('span', { class: 'sk-t' }, h('b', { text: m[1], raw: 1 }), h('em', { text: m[2] })), on ? icon('check') : h('i', { class: 'mchk' }));
-        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[1] + ' · ' + m[2].split(' · ')[1]); });
+        it.addEventListener('click', function () { closeM(); if (on) return; if (busy) { toast('Дождись ответа или нажми стоп'); return; } if (m[0] === 'orion' && !(sub && /^(max|ultra)$/.test(sub.plan))) { toast('Orion 3.0 доступна на тарифах max и ultra'); return; } S.settings.model = m[0]; save(); applyModel(); toast(m[1] + ' · ' + m[2].split(' · ')[1]); });
         return it;
       }));
       var r = mb.getBoundingClientRect();
@@ -3550,7 +3553,8 @@
       }
       var j = x.j || {}, msg;
       var plans = false;
-      if (x.st === 429) {
+      if (j.error === 'plan' || j.error === 'quota') { msg = j.detail || 'лимит исчерпан'; plans = j.error === 'plan' || !!j.upsell; }
+      else if (x.st === 429) {
         setLeft({ left: typeof j.left === 'number' ? j.left : 0, reset: j.reset, full: j.full }, j.plan); showLeft(); var until = j.reset ? ' (следующее сообщение в ' + hm(j.reset) + ')' : '';
         if (j.need > 1 && j.left > 0) { msg = 'для этой модели нужно ' + j.need + ' сообщения из лимита, а осталось ' + j.left + '. Выбери модель попроще или подожди' + until; plans = false; }
         else if (j.kind === 'week') { msg = 'недельный лимит исчерпан. он обновится в пятницу в 19:00' + (sub ? '. можно взять тариф побольше' : '. или возьми тариф'); plans = true; }
