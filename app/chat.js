@@ -1727,7 +1727,7 @@
       save(); closeSheet(); toast('Сохранено');
     };
     var reset = twice('Сбросить настройки', 'Точно сбросить? Нажми ещё раз', function () {
-      var keep = { memOn: S.settings.memOn, memory: S.settings.memory };
+      var keep = { memOn: S.settings.memOn, memory: S.settings.memory, memGone: S.settings.memGone, memAt: S.settings.memAt };
       S.settings = Object.assign({ name: '', about: '', style: 'normal', extra: '' }, keep); save(); closeSheet(); toast('Сброшено');
     }, 'danger');
     openSheet([
@@ -1912,7 +1912,7 @@
         var hp = {}; S.projects.forEach(function (p) { hp[p.id] = 1; });
         (Array.isArray(d.projects) ? d.projects : []).forEach(function (p) { if (p && p.id && !hp[p.id]) S.projects.push({ id: String(p.id), name: String(p.name || 'Проект'), instructions: String(p.instructions || ''), files: Array.isArray(p.files) ? p.files.filter(function (f) { return f && f.name; }).slice(0, 20).map(function (f) { return { name: String(f.name).slice(0, 60), text: String(f.text || '').slice(0, 15000) }; }) : [], created: p.created || Date.now(), ord: p.ord }); });
         var st = d.settings || {}, mem = S.settings.memory || (S.settings.memory = []);
-        (Array.isArray(st.memory) ? st.memory : []).forEach(function (x) { if (typeof x === 'string' && mem.indexOf(x) < 0) mem.push(x); });
+        (Array.isArray(st.memory) ? st.memory : []).forEach(function (x) { if (typeof x === 'string' && mem.indexOf(x) < 0) { mem.push(x); (S.settings.memAt || (S.settings.memAt = {}))[x] = Date.now(); if (S.settings.memGone) delete S.settings.memGone[x]; } });
         var sk = skillList(); (Array.isArray(st.skills) ? st.skills : []).forEach(function (k) { if (k && k.cmd && !sk.some(function (y) { return y.cmd === k.cmd; })) sk.push(k); });
         save(); renderAll(); closeSheet(); toast(n ? 'Добавлено чатов: ' + n : 'Новых чатов в копии нет');
       };
@@ -1954,6 +1954,13 @@
   }
   var blank = function (v) { return v == null || v === '' || (Array.isArray(v) && !v.length); };
   // слияние двух копий: чаты и проекты по id (новее побеждает), память и skills складываются, удалённое не воскресает
+  function pruneMem(st) {
+    var now = Date.now(), keep = {}, g = st.memGone || {}, a = st.memAt || {}, n = 0;
+    Object.keys(g).sort(function (x, y) { return g[y] - g[x]; }).forEach(function (k) { if (now - g[k] < 90 * 86400000 && n++ < 300) keep[k] = g[k]; });
+    var at = {}; Object.keys(a).forEach(function (k) { if (keep[k] || (st.memory || []).indexOf(k) >= 0) at[k] = a[k]; });
+    st.memGone = keep; st.memAt = at;
+  }
+  function forgetMem(t) { var st = S.settings; (st.memGone || (st.memGone = {}))[t] = Date.now(); pruneMem(st); }
   function mergeData(a, b, preferCloud) {
     var sa = a.settings || {}, sb = b.settings || {}, gone = Object.assign({}, sb.gone || {}, sa.gone || {}), st = {};
     var union = function (la, lb, pickNew) {
@@ -1961,10 +1968,14 @@
       return Object.keys(m).map(function (k) { return m[k]; });
     };
     Object.keys(Object.assign({}, sb, sa)).forEach(function (k) {
-      if (k === 'memory' || k === 'skills' || k === 'gone' || k === 'stick') return;
+      if (k === 'memory' || k === 'skills' || k === 'gone' || k === 'stick' || k === 'memGone' || k === 'memAt') return;
       st[k] = preferCloud ? (blank(sb[k]) ? sa[k] : sb[k]) : (blank(sa[k]) ? sb[k] : sa[k]);
     });
-    var seen = {}; st.memory = (sa.memory || []).concat(sb.memory || []).filter(function (t) { if (seen[t]) return false; seen[t] = 1; return true; });
+    // память: удалённая запись не возвращается из облака или с другого устройства (надгробие с временем; повторное добавление позже удаления побеждает)
+    var mg = {}, ma = {}, mx = function (dst, src) { Object.keys(src || {}).forEach(function (k) { if ((+src[k] || 0) > (dst[k] || 0)) dst[k] = +src[k] || 0; }); };
+    mx(mg, sb.memGone); mx(mg, sa.memGone); mx(ma, sb.memAt); mx(ma, sa.memAt);
+    var seen = {}; st.memory = (sa.memory || []).concat(sb.memory || []).filter(function (t) { if (typeof t !== 'string' || seen[t]) return false; seen[t] = 1; return !mg[t] || (ma[t] || 0) > mg[t]; });
+    st.memGone = mg; st.memAt = ma; pruneMem(st);
     var sk = {}; (sb.skills || []).concat(sa.skills || []).forEach(function (k) { sk[k.cmd] = k; }); st.skills = Object.keys(sk).map(function (k) { return sk[k]; });
     st.gone = gone;
     var chats = union(a.chats, b.chats, true).sort(function (x, y) { return (y.updated || 0) - (x.updated || 0); });
@@ -2466,7 +2477,7 @@
     if (!t) return false;
     if (m.indexOf(t) >= 0) { if (!auto && !quiet) toast('Это уже в памяти'); return false; }
     if (m.length >= lim().memory) { if (quiet) return false; limitToast('На тарифе ' + planWord() + ' в памяти до ' + lim().memory + ' записей'); return false; }
-    m.push(t); save(); if (auto && !quiet) memNotice(); return true;
+    m.push(t); (S.settings.memAt || (S.settings.memAt = {}))[t] = Date.now(); if (S.settings.memGone) delete S.settings.memGone[t]; save(); if (auto && !quiet) memNotice(); return true;
   }
   function swSwitch(key, def) {
     var st = S.settings, on = (st[key] == null ? def : st[key]);
@@ -2515,7 +2526,7 @@
       var m = st.memory || [];
       if (!m.length) list.append(h('p', { class: 'cap pad', text: 'Пока пусто. Напиши, например: «запомни, что я учусь на юриста».' }));
       m.forEach(function (t, i) {
-        var x = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'забыть' }, icon('close')); x.addEventListener('click', function () { m.splice(i, 1); save(); fill(); });
+        var x = h('button', { class: 'mem-x', type: 'button', 'aria-label': 'забыть' }, icon('close')); x.addEventListener('click', function () { forgetMem(t); m.splice(i, 1); save(); fill(); });
         list.append(h('div', { class: 'mem' }, h('span', { text: t, raw: 1 }), x));
       });
       cnt.textContent = m.length + ' из ' + lim().memory;
@@ -2539,7 +2550,7 @@
       h('div', { class: 'memhead' }, h('p', { class: 'glabel', text: 'Что я помню' }), cnt),
       list,
       h('div', { class: 'row-in' }, inp, add),
-      twice('Очистить память', 'Точно очистить? Нажми ещё раз', function () { st.memory = []; save(); fill(); toast('Память очищена'); }, 'danger')
+      twice('Очистить память', 'Точно очистить? Нажми ещё раз', function () { (st.memory || []).forEach(forgetMem); st.memory = []; save(); fill(); toast('Память очищена'); }, 'danger')
     ], true);
   }
 
