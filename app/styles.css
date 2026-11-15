@@ -1558,15 +1558,15 @@ html.tg body.typing .app .composer, html.tg.kbopen body .app .composer { padding
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 20' preserveAspectRatio='none'%3E%3Cpath d='M0 12 L2 10.5 L5 18 L9.6 0.6' fill='none' stroke='black' stroke-width='1.4' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
 .math .mbar { margin-top: .08em; }
 .math .mrd { font-size: 1em; line-height: 1; overflow: hidden; white-space: nowrap; text-indent: 200%; }
-.tchip.persona { margin-left: 6px; padding: 0 12px 0 10px; gap: 5px; color: var(--mute); }
-.tchip.persona svg.i { width: 14px; height: 14px; }
-.tchip.persona.open { color: var(--ink); border-color: var(--mute2); }
-.tchip.persona.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.tchip.persona:not(.on) span { display: none; }
-.tchip.persona:not(.on) { padding: 0 10px; }
-.app .composer .tbar .tchip.persona { order: 4; grid-column: 4; margin: 0; }
-@media (max-width: 480px) { .tchip.persona span, .tchip.persona.on span { display: none; } .tchip.persona, .tchip.persona.on { padding: 0 10px; } }
-
 /* модель без плашки (просто текст со стрелкой) слева от кнопки режима */
-.app .composer .tchip.model { order: 3; grid-column: 3; justify-self: end; margin: 0; background: none; border-color: transparent; padding: 0 2px 0 6px; color: var(--mute); }
+.app .composer .tchip.model { order: 4; grid-column: 4; justify-self: end; margin: 0; background: none; border-color: transparent; padding: 0 2px 0 6px; color: var(--mute); }
 .app .composer .tchip.model.open { border-color: transparent; }
+
+.pmodes-t { margin: 6px 14px 4px; font-size: 12px; font-weight: 600; color: var(--mute); letter-spacing: .02em; }
+.pmodes { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; max-width: 300px; }
+.pmode { all: unset; box-sizing: border-box; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; font-weight: 500; color: var(--mute); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pmode.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+#pick.pdot { position: relative; }
+#pick.pdot::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #7c9cff; box-shadow: 0 0 0 2px var(--bg); }
+/* блок с формулой не перехватывает вертикальную прокрутку чата */
+.math.d { overflow-y: hidden; overscroll-behavior: auto; touch-action: pan-x pan-y; }
