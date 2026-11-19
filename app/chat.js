@@ -3765,6 +3765,32 @@
   if (window.ResizeObserver) new ResizeObserver(measure).observe($('#composer'));
   window.addEventListener('resize', measure);
 
+  // не даём оттягивать приложение вниз: если под пальцем нечего прокручивать (или лента уже в крайней точке), жест гасится
+  (function noPull() {
+    var y0 = 0, sc = null;
+    function scroller(el) {
+      while (el && el !== document.body && el !== document.documentElement) {
+        if (el.nodeType === 1) {
+          var oy = getComputedStyle(el).overflowY;
+          if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+        }
+        el = el.parentNode;
+      }
+      return null;
+    }
+    document.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { sc = undefined; return; }
+      y0 = e.touches[0].clientY; sc = scroller(e.target);
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (sc === undefined || e.touches.length !== 1 || !e.cancelable) return;
+      var dy = e.touches[0].clientY - y0;
+      if (!sc) { e.preventDefault(); return; }
+      if (dy > 0 && sc.scrollTop <= 0) e.preventDefault();
+      else if (dy < 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) e.preventDefault();
+    }, { passive: false });
+  })();
+
   // оболочка приложения занимает ровно видимую область: высота и сдвиг берутся у visualViewport.
   // когда открывается клавиатура, оболочка уменьшается, поле ввода (оно внутри оболочки) остаётся над клавиатурой
   var rootEl = document.documentElement;
